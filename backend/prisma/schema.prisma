@@ -1,0 +1,878 @@
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  Immo-MyKajy — Modèle de données complet                                   ║
+// ║  Prisma Schema pour PostgreSQL                                              ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  ENUMS                                                                       │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+enum Role {
+  ADMIN
+  AGENCY_ADMIN
+  AGENT
+  OWNER
+  CLIENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum TransactionType {
+  SALE
+  RENT
+}
+
+enum PropertyStatus {
+  AVAILABLE
+  UNDER_OFFER // Une offre a été faite
+  RENTED
+  SOLD
+  UNDER_RENOVATION
+  ARCHIVED
+}
+
+enum ListingStatus {
+  DRAFT // Brouillon, pas encore publié
+  PENDING_REVIEW // En attente de validation par un admin/agence
+  ACTIVE // Publié et visible
+  PAUSED // Temporairement masqué par le propriétaire
+  EXPIRED // Date de publication dépassée
+  COMPLETED // Transaction finalisée
+  CANCELLED // Annulé
+}
+
+enum ListingVisibility {
+  PUBLIC // Visible par tous
+  PREMIUM // Mise en avant
+  PRIVATE // Visible uniquement par lien direct
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  VIRTUAL_TOUR
+  FLOOR_PLAN
+  DOCUMENT
+}
+
+enum VisitStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED_BY_CLIENT
+  CANCELLED_BY_AGENT
+  COMPLETED
+  NO_SHOW
+}
+
+enum VisitType {
+  IN_PERSON
+  VIRTUAL
+}
+
+enum InquiryStatus {
+  NEW
+  CONTACTED
+  IN_PROGRESS
+  ANSWERED
+  CLOSED
+}
+
+enum SaleStatus {
+  OFFER_MADE
+  OFFER_ACCEPTED
+  UNDER_CONTRACT
+  COMPLETED
+  CANCELLED
+}
+
+enum RentalStatus {
+  PENDING
+  ACTIVE
+  RENEWED
+  TERMINATED
+  EXPIRED
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  ACTIVE
+  RENEWED
+  TERMINATED
+  EXPIRED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CARD
+  BANK_TRANSFER
+  MOBILE_MONEY
+  CASH
+  CHECK
+  OTHER
+}
+
+enum CommissionStatus {
+  PENDING
+  INVOICED
+  PAID
+  CANCELLED
+}
+
+enum NotificationType {
+  VISIT_REQUEST
+  VISIT_CONFIRMED
+  VISIT_CANCELLED
+  MESSAGE_RECEIVED
+  INQUIRY_RECEIVED
+  PAYMENT_RECEIVED
+  PAYMENT_OVERDUE
+  CONTRACT_CREATED
+  CONTRACT_EXPIRING
+  LISTING_STATUS_CHANGE
+  FAVORITE_PRICE_DROP
+  SAVED_SEARCH_MATCH
+  SYSTEM
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  STATUS_CHANGE
+  PAYMENT
+  CONTRACT_SIGN
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  USER & PROFILES                                                             │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Compte utilisateur central de la plateforme
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  password    String
+  firstName   String?
+  lastName    String?
+  phone       String?
+  avatarUrl   String?
+  gender      Gender?
+  role        Role      @default(CLIENT)
+  isActive    Boolean   @default(true)
+  isVerified  Boolean   @default(false)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime? // Soft delete
+
+  // ── Profils (un seul actif par rôle) ──
+  agentProfile  Agent?
+  ownerProfile  Owner?
+  clientProfile Client?
+
+  // ── Relations ──
+  favorites         Favorite[]
+  savedSearches     SavedSearch[]
+  visits            Visit[]                   @relation("ClientVisits")
+  inquiries         Inquiry[]                 @relation("ClientInquiries")
+  messagesSent      Message[]                 @relation("SentMessages")
+  notifications     Notification[]
+  sales             Sale[]                    @relation("BuyerSales")
+  rentals           Rental[]                  @relation("TenantRentals")
+  payments          Payment[]                 @relation("UserPayments")
+  auditLogs         AuditLog[]
+  conversationUsers ConversationParticipant[]
+  refreshTokens     RefreshToken[]
+  passwordResetTokens     PasswordResetToken[]
+  emailVerificationTokens EmailVerificationToken[]
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+/// Jeton de rafraîchissement (opaque, hashé en base)
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Jeton de réinitialisation de mot de passe
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// Jeton de vérification d'email
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// Agence immobilière
+model Agency {
+  id            String    @id @default(uuid())
+  name          String
+  legalName     String? // Raison sociale
+  siret         String?   @unique
+  logoUrl       String?
+  bannerUrl     String?
+  description   String?
+  address       String
+  city          String
+  zipCode       String?
+  phone         String
+  email         String    @unique
+  website       String?
+  licenseNumber String? // Numéro de carte professionnelle (CPI)
+  isVerified    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  deletedAt     DateTime?
+
+  // ── Relations ──
+  agents      Agent[]
+  properties  Property[]
+  commissions Commission[]
+
+  @@index([city])
+  @@index([isActive])
+}
+
+/// Profil Agent rattaché à une agence
+model Agent {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agencyId        String
+  agency          Agency   @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  title           String? // Ex: "Conseiller immobilier senior"
+  licenseNumber   String?
+  biography       String?
+  specialties     String[] // Ex: ["Luxe", "Neuf", "Investissement"]
+  yearsExperience Int?
+  isAvailable     Boolean  @default(true)
+  rating          Float?   @default(0)
+  reviewCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // ── Relations ──
+  properties  Property[]
+  visits      Visit[]      @relation("AgentVisits")
+  inquiries   Inquiry[]    @relation("AgentInquiries")
+  sales       Sale[]       @relation("AgentSales")
+  rentals     Rental[]     @relation("AgentRentals")
+  commissions Commission[]
+
+  @@map("AgentProfile")
+}
+
+/// Profil Propriétaire (un bien peut appartenir à un propriétaire)
+model Owner {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName String? // Si le propriétaire est une société
+  siret       String?
+  address     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // ── Relations ──
+  properties Property[]
+  sales      Sale[]     @relation("SellerSales")
+  rentals    Rental[]   @relation("LandlordRentals")
+
+  @@map("OwnerProfile")
+}
+
+/// Profil Client (locataire ou acheteur potentiel)
+model Client {
+  id                String           @id @default(uuid())
+  userId            String           @unique
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredCity     String?
+  budgetMin         Float?
+  budgetMax         Float?
+  preferredType     TransactionType?
+  preferredRooms    Int?
+  isPreApproved     Boolean          @default(false) // Accord de prêt bancaire
+  preApprovalAmount Float?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@map("ClientProfile")
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  PROPERTY (bien physique)                                                    │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Type de bien immobilier (Appartement, Maison, Bureau, etc.)
+model PropertyType {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  slug        String   @unique
+  icon        String? // Ex: "apartment", "house", pour l'UI
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // ── Relations ──
+  properties Property[]
+}
+
+/// Bien immobilier physique
+model Property {
+  id            String         @id @default(uuid())
+  title         String
+  description   String
+  status        PropertyStatus @default(AVAILABLE)
+  yearBuilt     Int?
+  floor         Int? // Étage (pour les appartements)
+  totalFloors   Int? // Nombre total d'étages de l'immeuble
+  bedrooms      Int?
+  bathrooms     Int?
+  rooms         Int? // Nombre total de pièces
+  area          Float // Surface habitable en m²
+  landArea      Float? // Surface du terrain en m²
+  parkingSpaces Int?
+  energyRating  String? // DPE : A, B, C, D, E, F, G
+  ghgRating     String? // GES : A, B, C, D, E, F, G
+  isFurnished   Boolean        @default(false)
+  hasElevator   Boolean        @default(false)
+  hasBalcony    Boolean        @default(false)
+  hasGarden     Boolean        @default(false)
+  hasPool       Boolean        @default(false)
+  hasGarage     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
+
+  // ── FK ──
+  typeId     String
+  type       PropertyType @relation(fields: [typeId], references: [id])
+  locationId String       @unique
+  location   Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  ownerId    String?
+  owner      Owner?       @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  agencyId   String?
+  agency     Agency?      @relation(fields: [agencyId], references: [id], onDelete: SetNull)
+  agentId    String?
+  agent      Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  // ── Relations ──
+  media    PropertyMedia[]
+  features PropertyFeature[]
+  listings Listing[]
+
+  @@index([status])
+  @@index([typeId])
+  @@index([ownerId])
+  @@index([agencyId])
+}
+
+/// Localisation géographique d'un bien
+model Location {
+  id           String   @id @default(uuid())
+  address      String
+  complement   String? // Bâtiment, escalier, etc.
+  city         String
+  state        String? // Région
+  zipCode      String
+  country      String   @default("France")
+  latitude     Float?
+  longitude    Float?
+  neighborhood String? // Quartier
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // ── Relations ──
+  property Property?
+
+  @@index([city])
+  @@index([zipCode])
+}
+
+/// Média (photos, vidéos, visites virtuelles) associé à un bien
+model PropertyMedia {
+  id          String    @id @default(uuid())
+  propertyId  String
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  url         String
+  type        MediaType @default(IMAGE)
+  title       String?
+  description String?
+  isPrimary   Boolean   @default(false)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([propertyId])
+  @@index([type])
+}
+
+/// Caractéristique/équipement spécifique d'un bien
+model PropertyFeature {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name       String // Ex: "Climatisation", "Fibre optique", "Interphone"
+  category   String? // Ex: "Confort", "Sécurité", "Extérieur"
+  value      String? // Ex: "Oui", "2 places", "Classe A"
+  createdAt  DateTime @default(now())
+
+  @@index([propertyId])
+  @@index([category])
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  LISTING (annonce publiée)                                                   │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Annonce publiée pour un bien — un bien peut avoir plusieurs annonces
+model Listing {
+  id              String            @id @default(uuid())
+  propertyId      String
+  property        Property          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  transactionType TransactionType // SALE ou RENT
+  status          ListingStatus     @default(DRAFT)
+  visibility      ListingVisibility @default(PUBLIC)
+  title           String? // Titre personnalisé (sinon hérité du Property)
+  description     String? // Description personnalisée
+  slug            String?           @unique
+  viewsCount      Int               @default(0)
+  contactCount    Int               @default(0)
+  isFeatured      Boolean           @default(false) // Annonce premium mise en avant
+  publishedAt     DateTime? // Date de publication effective
+  expiresAt       DateTime? // Date d'expiration automatique
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  // ── Relations ──
+  price     ListingPrice?
+  favorites Favorite[]
+  visits    Visit[]
+  inquiries Inquiry[]
+  sales     Sale[]
+  rentals   Rental[]
+
+  @@index([transactionType])
+  @@index([status])
+  @@index([publishedAt])
+  @@index([propertyId])
+}
+
+/// Prix et conditions financières d'une annonce
+model ListingPrice {
+  id              String  @id @default(uuid())
+  listingId       String  @unique
+  listing         Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  price           Float // Prix de vente ou loyer mensuel
+  pricePerSqm     Float? // Prix au m² (calculé ou saisi)
+  currency        String  @default("EUR")
+  isNegotiable    Boolean @default(false)
+  // Champs spécifiques Location
+  deposit         Float? // Dépôt de garantie
+  agencyFees      Float? // Honoraires d'agence
+  charges         Float? // Charges mensuelles
+  chargesIncluded Boolean @default(false)
+  // Champs spécifiques Vente
+  notaryFees      Float? // Frais de notaire estimés
+  taxeFonciere    Float? // Taxe foncière annuelle
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  FAVORITES & SAVED SEARCHES                                                  │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Annonce mise en favori par un utilisateur
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, listingId])
+  @@index([userId])
+}
+
+/// Recherche sauvegardée avec critères (pour alertes email/push)
+model SavedSearch {
+  id              String           @id @default(uuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String // Ex: "Appart 3 pièces Paris"
+  transactionType TransactionType?
+  city            String?
+  minPrice        Float?
+  maxPrice        Float?
+  minArea         Float?
+  maxArea         Float?
+  minRooms        Int?
+  propertyTypeId  String?
+  isActive        Boolean          @default(true) // Alertes activées
+  lastNotifiedAt  DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  VISITS & INQUIRIES                                                          │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Demande de visite d'un bien
+model Visit {
+  id              String      @id @default(uuid())
+  listingId       String
+  listing         Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  clientId        String
+  client          User        @relation("ClientVisits", fields: [clientId], references: [id], onDelete: Cascade)
+  agentId         String?
+  agent           Agent?      @relation("AgentVisits", fields: [agentId], references: [id], onDelete: SetNull)
+  scheduledAt     DateTime // Date et heure prévues
+  duration        Int?        @default(30) // Durée en minutes
+  type            VisitType   @default(IN_PERSON)
+  status          VisitStatus @default(PENDING)
+  clientNotes     String? // Notes du client
+  agentNotes      String? // Notes privées de l'agent
+  feedbackRating  Int? // Note post-visite (1-5)
+  feedbackComment String?
+  cancelReason    String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([listingId])
+  @@index([clientId])
+  @@index([agentId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+/// Demande d'information sur une annonce
+model Inquiry {
+  id          String        @id @default(uuid())
+  listingId   String
+  listing     Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  clientId    String?
+  client      User?         @relation("ClientInquiries", fields: [clientId], references: [id], onDelete: Cascade)
+  name        String? // Nom du demandeur
+  email       String? // Email du demandeur
+  phone       String? // Téléphone du demandeur
+  agentId     String?
+  agent       Agent?        @relation("AgentInquiries", fields: [agentId], references: [id], onDelete: SetNull)
+  subject     String
+  message     String
+  status      InquiryStatus @default(NEW)
+  response    String? // Réponse de l'agent
+  respondedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([listingId])
+  @@index([clientId])
+  @@index([status])
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  TRANSACTIONS : SALE & RENTAL                                                │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Transaction de vente
+model Sale {
+  id             String     @id @default(uuid())
+  listingId      String
+  listing        Listing    @relation(fields: [listingId], references: [id])
+  sellerId       String
+  seller         Owner      @relation("SellerSales", fields: [sellerId], references: [id])
+  buyerId        String
+  buyer          User       @relation("BuyerSales", fields: [buyerId], references: [id])
+  agentId        String?
+  agent          Agent?     @relation("AgentSales", fields: [agentId], references: [id])
+  offerPrice     Float // Prix proposé par l'acheteur
+  agreedPrice    Float? // Prix final convenu
+  status         SaleStatus @default(OFFER_MADE)
+  offerDate      DateTime   @default(now())
+  acceptedDate   DateTime?
+  completionDate DateTime? // Date de signature acte authentique
+  notaryName     String?
+  notes          String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  // ── Relations ──
+  payments    Payment[]    @relation("SalePayments")
+  commissions Commission[] @relation("SaleCommissions")
+
+  @@index([listingId])
+  @@index([status])
+}
+
+/// Contrat de location
+model Rental {
+  id          String       @id @default(uuid())
+  listingId   String
+  listing     Listing      @relation(fields: [listingId], references: [id])
+  landlordId  String
+  landlord    Owner        @relation("LandlordRentals", fields: [landlordId], references: [id])
+  tenantId    String
+  tenant      User         @relation("TenantRentals", fields: [tenantId], references: [id])
+  agentId     String?
+  agent       Agent?       @relation("AgentRentals", fields: [agentId], references: [id])
+  monthlyRent Float
+  deposit     Float? // Dépôt de garantie
+  charges     Float? // Charges mensuelles
+  status      RentalStatus @default(PENDING)
+  startDate   DateTime
+  endDate     DateTime?
+  renewalDate DateTime?
+  notes       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // ── Relations ──
+  contract    RentalContract?
+  payments    Payment[]       @relation("RentalPayments")
+  commissions Commission[]    @relation("RentalCommissions")
+
+  @@index([listingId])
+  @@index([tenantId])
+  @@index([status])
+}
+
+/// Contrat de location détaillé (document juridique)
+model RentalContract {
+  id                String         @id @default(uuid())
+  rentalId          String         @unique
+  rental            Rental         @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  contractNumber    String         @unique
+  status            ContractStatus @default(DRAFT)
+  signedByTenant    Boolean        @default(false)
+  signedByLandlord  Boolean        @default(false)
+  signedAt          DateTime?
+  terms             String? // Clauses particulières (texte ou JSON)
+  documentUrl       String? // Lien vers le PDF signé
+  inventoryInUrl    String? // État des lieux d'entrée
+  inventoryOutUrl   String? // État des lieux de sortie
+  terminationDate   DateTime?
+  terminationReason String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([status])
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  PAYMENTS & COMMISSIONS                                                      │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Paiement (loyer, prix de vente, dépôt de garantie, etc.)
+model Payment {
+  id             String         @id @default(uuid())
+  userId         String
+  user           User           @relation("UserPayments", fields: [userId], references: [id])
+  saleId         String?
+  sale           Sale?          @relation("SalePayments", fields: [saleId], references: [id])
+  rentalId       String?
+  rental         Rental?        @relation("RentalPayments", fields: [rentalId], references: [id])
+  amount         Float
+  currency       String         @default("EUR")
+  status         PaymentStatus  @default(PENDING)
+  method         PaymentMethod?
+  transactionRef String?        @unique // Référence externe (passerelle de paiement)
+  description    String? // Ex: "Loyer Septembre 2026", "Dépôt de garantie"
+  dueDate        DateTime
+  paidAt         DateTime?
+  failedReason   String?
+  receiptUrl     String? // Lien vers le reçu/facture
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([saleId])
+  @@index([rentalId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+/// Commission d'agence sur une transaction
+model Commission {
+  id            String           @id @default(uuid())
+  agencyId      String
+  agency        Agency           @relation(fields: [agencyId], references: [id])
+  agentId       String?
+  agent         Agent?           @relation(fields: [agentId], references: [id])
+  saleId        String?
+  sale          Sale?            @relation("SaleCommissions", fields: [saleId], references: [id])
+  rentalId      String?
+  rental        Rental?          @relation("RentalCommissions", fields: [rentalId], references: [id])
+  amount        Float
+  percentage    Float? // Pourcentage de commission
+  currency      String           @default("EUR")
+  status        CommissionStatus @default(PENDING)
+  invoiceNumber String?          @unique
+  invoiceUrl    String?
+  paidAt        DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([agencyId])
+  @@index([agentId])
+  @@index([status])
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  MESSAGING                                                                   │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Conversation entre utilisateurs
+model Conversation {
+  id         String   @id @default(uuid())
+  subject    String? // Ex: "Au sujet de l'annonce T3 Paris 10e"
+  listingRef String? // ID de l'annonce concernée (non-FK pour flexibilité)
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // ── Relations ──
+  participants ConversationParticipant[]
+  messages     Message[]
+}
+
+/// Participant d'une conversation
+model ConversationParticipant {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hasUnread      Boolean      @default(false)
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+/// Message dans une conversation
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  isRead         Boolean      @default(false)
+  isEdited       Boolean      @default(false)
+  attachmentUrl  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  NOTIFICATIONS                                                               │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Notification envoyée à un utilisateur
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  content   String
+  link      String? // Lien de redirection dans l'app
+  metadata  Json? // Données additionnelles (ex: listingId, visitId)
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+// ┌──────────────────────────────────────────────────────────────────────────────┐
+// │  AUDIT LOG                                                                   │
+// └──────────────────────────────────────────────────────────────────────────────┘
+
+/// Journal d'audit pour traçabilité des actions sensibles
+model AuditLog {
+  id         String      @id @default(uuid())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     AuditAction
+  entityType String // Ex: "User", "Listing", "Payment"
+  entityId   String? // UUID de l'entité concernée
+  oldValues  Json? // Valeurs avant modification
+  newValues  Json? // Valeurs après modification
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
