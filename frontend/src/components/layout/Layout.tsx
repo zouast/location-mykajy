@@ -2,15 +2,18 @@ import { useState } from 'react';
 import { Outlet, NavLink, Link } from 'react-router-dom';
 import {
   Building2,
+  Building,
   LogOut,
   LayoutDashboard,
   Menu,
   X,
   MapPin,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/AuthContext';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { NotificationBell } from '@/features/notifications/components/NotificationBell';
 
 export function Layout() {
   const { isAuthenticated, user, logout } = useAuth();
@@ -95,6 +98,64 @@ export function Layout() {
                   <span className="text-xs font-semibold">Demandes</span>
                 </Link>
                 <Link
+                  to="/visits"
+                  title="Mes Visites & Agenda"
+                  className={cn(
+                    buttonVariants({ variant: 'ghost', size: 'sm' }),
+                    'rounded-full text-muted-foreground hover:text-indigo-600',
+                  )}
+                >
+                  <span className="text-xs font-semibold">Visites</span>
+                </Link>
+                <Link
+                  to="/rentals"
+                  title="Gestion Locative & Baux"
+                  className={cn(
+                    buttonVariants({ variant: 'ghost', size: 'sm' }),
+                    'rounded-full text-muted-foreground hover:text-indigo-600',
+                  )}
+                >
+                  <span className="text-xs font-semibold">Locations & Baux</span>
+                </Link>
+                {user?.role === 'ADMIN' ? (
+                  <Link
+                    to="/admin/dashboard"
+                    title="Console d'Administration"
+                    className={cn(
+                      buttonVariants({ size: 'sm' }),
+                      'rounded-full bg-gradient-to-r from-red-600 to-rose-700 text-white font-bold text-xs shadow-md shadow-rose-600/30 hover:opacity-90',
+                    )}
+                  >
+                    <ShieldCheck className="h-3.5 w-3.5 mr-1 text-white" />
+                    Admin
+                  </Link>
+                ) : (user?.role === 'AGENCY_ADMIN' || user?.role === 'AGENT') ? (
+                  <Link
+                    to="/agent/dashboard"
+                    title="Espace Agent & Agence"
+                    className={cn(
+                      buttonVariants({ size: 'sm' }),
+                      'rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-md shadow-purple-600/20 hover:opacity-90',
+                    )}
+                  >
+                    <Building className="h-3.5 w-3.5 mr-1" />
+                    Espace Pro
+                  </Link>
+                ) : (
+                  <Link
+                    to="/owner/dashboard"
+                    title="Espace Propriétaire"
+                    className={cn(
+                      buttonVariants({ size: 'sm' }),
+                      'rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-xs shadow-md shadow-indigo-600/20 hover:opacity-90',
+                    )}
+                  >
+                    <Building2 className="h-3.5 w-3.5 mr-1" />
+                    Espace Bailleur
+                  </Link>
+                )}
+                <NotificationBell />
+                <Link
                   to="/profile"
                   className={cn(
                     buttonVariants({ variant: 'outline', size: 'sm' }),
@@ -138,8 +199,9 @@ export function Layout() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu & Notif Button */}
           <div className="flex md:hidden items-center gap-2">
+            {isAuthenticated && <NotificationBell />}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border text-foreground hover:bg-muted"
@@ -175,6 +237,43 @@ export function Layout() {
               <div className="mt-4 border-t border-border pt-4 flex flex-col gap-2">
                 {isAuthenticated ? (
                   <>
+                    {user?.role === 'ADMIN' ? (
+                      <Link
+                        to="/admin/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={cn(
+                          buttonVariants({ size: 'sm' }),
+                          'w-full justify-start bg-gradient-to-r from-red-600 to-rose-700 text-white font-bold text-xs shadow-md shadow-rose-600/30',
+                        )}
+                      >
+                        <ShieldCheck className="h-4 w-4 mr-2" />
+                        Administration Plateforme
+                      </Link>
+                    ) : (user?.role === 'AGENCY_ADMIN' || user?.role === 'AGENT') ? (
+                      <Link
+                        to="/agent/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={cn(
+                          buttonVariants({ size: 'sm' }),
+                          'w-full justify-start bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-md shadow-purple-600/20',
+                        )}
+                      >
+                        <Building className="h-4 w-4 mr-2" />
+                        Espace Agent & Agence
+                      </Link>
+                    ) : (
+                      <Link
+                        to="/owner/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className={cn(
+                          buttonVariants({ size: 'sm' }),
+                          'w-full justify-start bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-xs shadow-md shadow-indigo-600/20',
+                        )}
+                      >
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Espace Propriétaire
+                      </Link>
+                    )}
                     <Link
                       to="/favorites"
                       onClick={() => setMobileMenuOpen(false)}
@@ -195,6 +294,20 @@ export function Layout() {
                       className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-start text-xs')}
                     >
                       Demandes & Messages
+                    </Link>
+                    <Link
+                      to="/visits"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-start text-xs')}
+                    >
+                      Mes Visites & Agenda
+                    </Link>
+                    <Link
+                      to="/rentals"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-start text-xs')}
+                    >
+                      Mes Locations & Baux
                     </Link>
                     <Link
                       to="/profile"

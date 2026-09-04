@@ -68,11 +68,14 @@ enum MediaType {
 }
 
 enum VisitStatus {
-  PENDING
+  REQUESTED
   CONFIRMED
+  COMPLETED
+  CANCELLED
+  REJECTED
+  PENDING
   CANCELLED_BY_CLIENT
   CANCELLED_BY_AGENT
-  COMPLETED
   NO_SHOW
 }
 
@@ -97,11 +100,27 @@ enum SaleStatus {
   CANCELLED
 }
 
+enum ApplicationStatus {
+  APPLICATION
+  DOCUMENT_REVIEW
+  APPROVED
+  REJECTED
+  CONTRACT_PENDING
+  ACTIVE
+  TERMINATED
+  CANCELLED
+}
+
 enum RentalStatus {
+  APPLICATION
+  DOCUMENT_REVIEW
+  APPROVED
+  CONTRACT_PENDING
   PENDING
   ACTIVE
   RENEWED
   TERMINATED
+  CANCELLED
   EXPIRED
 }
 
@@ -141,19 +160,32 @@ enum CommissionStatus {
 }
 
 enum NotificationType {
-  VISIT_REQUEST
+  NEW_INQUIRY
+  VISIT_REQUESTED
   VISIT_CONFIRMED
   VISIT_CANCELLED
+  LISTING_APPROVED
+  LISTING_REJECTED
+  NEW_MESSAGE
+  PAYMENT_RECEIVED
+  PAYMENT_FAILED
+  SAVED_SEARCH_MATCH
+  VISIT_REQUEST
   MESSAGE_RECEIVED
   INQUIRY_RECEIVED
-  PAYMENT_RECEIVED
   PAYMENT_OVERDUE
   CONTRACT_CREATED
   CONTRACT_EXPIRING
   LISTING_STATUS_CHANGE
   FAVORITE_PRICE_DROP
-  SAVED_SEARCH_MATCH
   SYSTEM
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+  WHATSAPP
 }
 
 enum AuditAction {
@@ -498,12 +530,13 @@ model Listing {
   deletedAt       DateTime?
 
   // ── Relations ──
-  price     ListingPrice?
-  favorites Favorite[]
-  visits    Visit[]
-  inquiries Inquiry[]
-  sales     Sale[]
-  rentals   Rental[]
+  price         ListingPrice?
+  favorites     Favorite[]
+  visits        Visit[]
+  inquiries     Inquiry[]
+  sales         Sale[]
+  rentals       Rental[]
+  conversations Conversation[]
 
   @@index([transactionType])
   @@index([status])
@@ -589,7 +622,7 @@ model Visit {
   scheduledAt     DateTime // Date et heure prévues
   duration        Int?        @default(30) // Durée en minutes
   type            VisitType   @default(IN_PERSON)
-  status          VisitStatus @default(PENDING)
+  status          VisitStatus @default(REQUESTED)
   clientNotes     String? // Notes du client
   agentNotes      String? // Notes privées de l'agent
   feedbackRating  Int? // Note post-visite (1-5)
@@ -664,6 +697,78 @@ model Sale {
   @@index([status])
 }
 
+/// Demande et Dossier de candidature locataire
+model RentalApplication {
+  id               String                      @id @default(uuid())
+  listingId        String
+  listing          Listing                     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  tenantId         String
+  tenant           User                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  agentId          String?
+  agent            Agent?                      @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  landlordId       String
+  landlord         Owner                       @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+  status           ApplicationStatus           @default(APPLICATION)
+  monthlyIncome    Float
+  employmentStatus String // CDI, CDD, Indépendant, Étudiant, Fonctionnaire, etc.
+  employer         String?
+  guarantorName    String?
+  guarantorIncome  Float?
+  comments         String?
+  rejectionReason  String?
+  reviewedAt       DateTime?
+  approvedAt       DateTime?
+  rentalId         String?                     @unique
+  rental           Rental?                     @relation(fields: [rentalId], references: [id], onDelete: SetNull)
+  documents        RentalApplicationDocument[]
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@index([listingId])
+  @@index([tenantId])
+  @@index([landlordId])
+  @@index([status])
+}
+
+/// Pièces justificatives du dossier locataire
+model RentalApplicationDocument {
+  id            String            @id @default(uuid())
+  applicationId String
+  application   RentalApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  type          String // IDENTITY_CARD, PAYSLIP, TAX_NOTICE, EMPLOYMENT_CONTRACT, GUARANTOR_ID, GUARANTOR_TAX, RENT_RECEIPT, OTHER
+  fileName      String
+  fileUrl       String
+  fileSize      Int?
+  mimeType      String?
+  isVerified    Boolean           @default(false)
+  verifiedAt    DateTime?
+  createdAt     DateTime          @default(now())
+
+  @@index([applicationId])
+}
+
+/// Échéancier de loyer / Quittances
+model RentSchedule {
+  id            String        @id @default(uuid())
+  rentalId      String
+  rental        Rental        @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+  period        String // Ex: "2026-09"
+  dueDate       DateTime
+  rentAmount    Float
+  chargesAmount Float
+  totalAmount   Float
+  status        PaymentStatus @default(PENDING)
+  paymentId     String?
+  paidAt        DateTime?
+  receiptUrl    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([rentalId])
+  @@index([dueDate])
+  @@index([status])
+}
+
 /// Contrat de location
 model Rental {
   id          String       @id @default(uuid())
@@ -676,9 +781,9 @@ model Rental {
   agentId     String?
   agent       Agent?       @relation("AgentRentals", fields: [agentId], references: [id])
   monthlyRent Float
-  deposit     Float? // Dépôt de garantie
+  deposit     Float? // Dépôt de garantie / Caution
   charges     Float? // Charges mensuelles
-  status      RentalStatus @default(PENDING)
+  status      RentalStatus @default(APPLICATION)
   startDate   DateTime
   endDate     DateTime?
   renewalDate DateTime?
@@ -687,9 +792,11 @@ model Rental {
   updatedAt   DateTime     @updatedAt
 
   // ── Relations ──
+  application RentalApplication?
   contract    RentalContract?
-  payments    Payment[]       @relation("RentalPayments")
-  commissions Commission[]    @relation("RentalCommissions")
+  schedules   RentSchedule[]
+  payments    Payment[]          @relation("RentalPayments")
+  commissions Commission[]       @relation("RentalCommissions")
 
   @@index([listingId])
   @@index([tenantId])
@@ -783,16 +890,22 @@ model Commission {
 
 /// Conversation entre utilisateurs
 model Conversation {
-  id         String   @id @default(uuid())
-  subject    String? // Ex: "Au sujet de l'annonce T3 Paris 10e"
-  listingRef String? // ID de l'annonce concernée (non-FK pour flexibilité)
-  isArchived Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id            String    @id @default(uuid())
+  subject       String? // Ex: "Au sujet de l'annonce T3 Paris 10e"
+  listingId     String?
+  listing       Listing?  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  listingRef    String? // ID de l'annonce concernée (non-FK pour flexibilité)
+  isArchived    Boolean   @default(false)
+  lastMessageAt DateTime? @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   // ── Relations ──
   participants ConversationParticipant[]
   messages     Message[]
+
+  @@index([listingId])
+  @@index([lastMessageAt])
 }
 
 /// Participant d'une conversation
@@ -821,6 +934,10 @@ model Message {
   isRead         Boolean      @default(false)
   isEdited       Boolean      @default(false)
   attachmentUrl  String?
+  attachmentName String?
+  attachmentSize Int?
+  attachmentType String?
+  readAt         DateTime?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -835,21 +952,45 @@ model Message {
 
 /// Notification envoyée à un utilisateur
 model Notification {
-  id        String           @id @default(uuid())
+  id        String              @id @default(uuid())
   userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   type      NotificationType
+  channel   NotificationChannel @default(IN_APP)
   title     String
   content   String
   link      String? // Lien de redirection dans l'app
   metadata  Json? // Données additionnelles (ex: listingId, visitId)
-  isRead    Boolean          @default(false)
+  isRead    Boolean             @default(false)
   readAt    DateTime?
-  createdAt DateTime         @default(now())
+  createdAt DateTime            @default(now())
 
   @@index([userId])
   @@index([type])
+  @@index([channel])
   @@index([isRead])
+  @@index([createdAt])
+}
+
+/// Journal d'envoi multi-canaux des notifications
+model NotificationLog {
+  id        String              @id @default(uuid())
+  userId    String?
+  recipient String // Email, phone, or userId
+  type      NotificationType
+  channel   NotificationChannel
+  title     String
+  content   String
+  status    String              @default("SENT") // SENT, FAILED, QUEUED
+  error     String?
+  messageId String?
+  metadata  Json?
+  createdAt DateTime            @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([channel])
+  @@index([status])
   @@index([createdAt])
 }
 

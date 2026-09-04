@@ -22,6 +22,8 @@ import { OwnersModule } from './owners/owners.module';
 import { SavedSearchesModule } from './saved-searches/saved-searches.module';
 import { InquiriesModule } from './inquiries/inquiries.module';
 import { VisitsModule } from './visits/visits.module';
+import { RentalsModule } from './rentals/rentals.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -38,6 +40,7 @@ import { VisitsModule } from './visits/visits.module';
     SavedSearchesModule,
     InquiriesModule,
     VisitsModule,
+    RentalsModule,
     MessagesModule,
     AppointmentsModule,
     MediaModule,
@@ -46,6 +49,7 @@ import { VisitsModule } from './visits/visits.module';
     AgenciesModule,
     AgentsModule,
     OwnersModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,223 +1,654 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { CreateVisitDto } from './dto/create-visit.dto';
 import { UpdateVisitStatusDto } from './dto/update-visit-status.dto';
-import { VisitStatus, NotificationType, Role } from '@prisma/client';
+import {
+  VisitResponseDto,
+  AvailabilityResponseDto,
+  DayAvailabilitySlotDto,
+} from './dto/visit-response.dto';
+import { VisitStatus, Role } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class VisitsService {
-  constructor(private readonly prisma: PrismaService) {}
-
-  private activeStatuses = [VisitStatus.PENDING, VisitStatus.CONFIRMED];
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   /**
-   * Create a visit request — prevents obvious conflicts for the same listing or agent
+   * Créer une demande de visite avec détection et blocage des conflits
    */
-  async create(userId: string | null, dto: CreateVisitDto) {
+  async create(clientId: string, dto: CreateVisitDto): Promise<VisitResponseDto> {
+    const scheduledStart = new Date(dto.scheduledAt);
+    if (isNaN(scheduledStart.getTime())) {
+      throw new BadRequestException('Date et heure de visite invalides.');
+    }
+
+    // Interdire la réservation dans le passé
+    if (scheduledStart.getTime() < Date.now()) {
+      throw new BadRequestException('La date de visite doit être située dans le futur.');
+    }
+
+    const duration = dto.duration || 45;
+    const scheduledEnd = new Date(scheduledStart.getTime() + duration * 60 * 1000);
+
+    // Récupérer l'annonce et l'agent assigné
     const listing = await this.prisma.listing.findUnique({
       where: { id: dto.listingId },
-      include: { property: { include: { agent: true, owner: true } }, price: true },
-    });
-
-    if (!listing) throw new NotFoundException('Annonce introuvable');
-
-    const start = new Date(dto.scheduledAt);
-    if (isNaN(start.getTime())) throw new BadRequestException('Date invalide');
-    const duration = dto.duration ?? 30;
-    const end = new Date(start.getTime() + duration * 60 * 1000);
-
-    const assignedAgentId = dto.agentId || listing.property.agentId || undefined;
-
-    // Search candidate visits in a reasonable window and then check overlaps in JS
-    const windowStart = new Date(start.getTime() - 1000 * 60 * 60 * 24); // 24h before
-
-    const candidates = await this.prisma.visit.findMany({
-      where: {
-        AND: [
-          { status: { in: this.activeStatuses } },
-          {
-            OR: [
-              { listingId: dto.listingId },
-              ...(assignedAgentId ? [{ agentId: assignedAgentId }] : []),
-            ],
+      include: {
+        property: {
+          include: {
+            agent: true,
+            owner: true,
           },
-          { scheduledAt: { lt: end } },
-          { scheduledAt: { gte: windowStart } },
-        ],
+        },
       },
     });
 
-    for (const v of candidates) {
-      const vStart = new Date(v.scheduledAt);
-      const vDuration = v.duration ?? 30;
-      const vEnd = new Date(vStart.getTime() + vDuration * 60 * 1000);
-
-      const overlap = vStart < end && vEnd > start;
-      if (overlap) {
-        // If overlap concerns same agent or same listing — conflict
-        if (v.listingId === dto.listingId || (assignedAgentId && v.agentId === assignedAgentId)) {
-          throw new ConflictException('Conflit de planning détecté pour cette période');
-        }
-      }
+    if (!listing) {
+      throw new NotFoundException(`L'annonce avec l'ID ${dto.listingId} n'existe pas.`);
     }
 
+    const agentId = listing.property.agentId || undefined;
+
+    // ── VÉRIFICATION DES CONFLITS HORAIRES SUR LE BIEN ET L'AGENT ──
+    await this.assertNoSchedulingConflict(dto.listingId, agentId, scheduledStart, duration);
+
+    // Création de la visite
     const visit = await this.prisma.visit.create({
       data: {
         listingId: dto.listingId,
-        clientId: userId || undefined,
-        agentId: assignedAgentId,
-        scheduledAt: start,
+        clientId,
+        agentId,
+        scheduledAt: scheduledStart,
         duration,
-        type: dto.type,
+        type: dto.type || 'IN_PERSON',
+        status: VisitStatus.REQUESTED,
         clientNotes: dto.clientNotes,
-        status: VisitStatus.PENDING,
       },
       include: {
         client: true,
-        listing: { include: { property: { include: { location: true, media: { where: { isPrimary: true }, take: 1 } }, }, price: true } },
-        agent: true,
+        agent: {
+          include: {
+            user: true,
+          },
+        },
+        listing: {
+          include: {
+            price: true,
+            property: {
+              include: {
+                location: true,
+                media: { where: { isPrimary: true }, take: 1 },
+              },
+            },
+          },
+        },
       },
     });
 
-    // Notify the responsible user (agent or owner)
-    const targetUserId = listing.property.agent?.userId || listing.property.owner?.userId;
+    // Notification multi-canaux à l'agent ou propriétaire
+    const targetUserId =
+      listing.property.agent?.userId || listing.property.owner?.userId;
+
     if (targetUserId) {
-      await this.prisma.notification.create({
-        data: {
-          userId: targetUserId,
-          type: NotificationType.VISIT_REQUEST,
-          title: 'Nouvelle demande de visite',
-          content: `Nouvelle demande de visite pour l'annonce ${listing.title || listing.property.title}`,
-          metadata: { visitId: visit.id, listingId: listing.id },
-        },
+      const clientName = [visit.client.firstName, visit.client.lastName]
+        .filter(Boolean)
+        .join(' ') || visit.client.email;
+
+      await this.notificationsService.notifyVisitRequested({
+        recipientUserId: targetUserId,
+        listingTitle: listing.title || listing.property.title,
+        clientName,
+        visitDate: scheduledStart,
+        visitId: visit.id,
       });
     }
 
-    return visit;
+    return this.mapToDto(visit);
   }
 
-  async findMySentVisits(userId: string) {
-    return this.prisma.visit.findMany({
-      where: { clientId: userId },
-      orderBy: { scheduledAt: 'desc' },
-      include: { listing: { include: { property: { include: { location: true, media: { where: { isPrimary: true }, take: 1 } } }, price: true } }, agent: true },
+  /**
+   * Calculer les disponibilités journalières pour une annonce (créneaux libres / occupés)
+   */
+  async getAvailability(listingId: string, dateStr: string): Promise<AvailabilityResponseDto> {
+    const listing = await this.prisma.listing.findUnique({
+      where: { id: listingId },
+      include: { property: true },
     });
-  }
 
-  async findPublic(listingId: string) {
-    return this.prisma.visit.findMany({
-      where: { listingId },
-      orderBy: { scheduledAt: 'desc' },
-      select: { id: true, scheduledAt: true, duration: true, status: true, agentId: true },
+    if (!listing) {
+      throw new NotFoundException(`Annonce ${listingId} introuvable.`);
+    }
+
+    const startOfDay = new Date(`${dateStr}T00:00:00.000Z`);
+    const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
+
+    // Récupérer les visites existantes pour cette journée sur cette annonce
+    const activeVisits = await this.prisma.visit.findMany({
+      where: {
+        listingId,
+        scheduledAt: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+        status: {
+          in: [VisitStatus.REQUESTED, VisitStatus.CONFIRMED],
+        },
+      },
+      select: {
+        scheduledAt: true,
+        duration: true,
+      },
     });
+
+    // Plage d'horaires standards de visite (9h00 à 18h00)
+    const standardHours = [
+      '09:00',
+      '10:00',
+      '11:00',
+      '14:00',
+      '15:00',
+      '16:00',
+      '17:00',
+    ];
+
+    const now = Date.now();
+
+    const slots: DayAvailabilitySlotDto[] = standardHours.map((hourStr) => {
+      const slotDate = new Date(`${dateStr}T${hourStr}:00.000Z`);
+      const slotStartTime = slotDate.getTime();
+      const slotEndTime = slotStartTime + 45 * 60 * 1000;
+
+      // Est-ce dans le passé ?
+      if (slotStartTime < now) {
+        return {
+          time: hourStr,
+          isAvailable: false,
+          reason: 'Créneau passé',
+        };
+      }
+
+      // Conflit avec une visite existante ?
+      const conflict = activeVisits.some((v) => {
+        const vStart = new Date(v.scheduledAt).getTime();
+        const vEnd = vStart + (v.duration || 45) * 60 * 1000;
+        return slotStartTime < vEnd && slotEndTime > vStart;
+      });
+
+      if (conflict) {
+        return {
+          time: hourStr,
+          isAvailable: false,
+          reason: 'Créneau déjà réservé',
+        };
+      }
+
+      return {
+        time: hourStr,
+        isAvailable: true,
+      };
+    });
+
+    return {
+      date: dateStr,
+      slots,
+    };
   }
 
-  async findReceivedVisits(userId: string, role: Role, status?: VisitStatus | string) {
-    // Build where according to role
-    let where: any = {};
+  /**
+   * Mettre à jour le statut d'une visite (Confirmation, Annulation, Rejet, Clôture)
+   */
+  async updateStatus(
+    userId: string,
+    id: string,
+    dto: UpdateVisitStatusDto,
+  ): Promise<VisitResponseDto> {
+    const visit = await this.prisma.visit.findUnique({
+      where: { id },
+      include: {
+        client: true,
+        agent: { include: { user: true } },
+        listing: {
+          include: {
+            property: {
+              include: {
+                agent: true,
+                owner: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!visit) {
+      throw new NotFoundException(`Visite avec l'ID ${id} non trouvée.`);
+    }
+
+    const isClient = visit.clientId === userId;
+    const isAgent = visit.agent?.userId === userId || visit.listing.property.agent?.userId === userId;
+    const isOwner = visit.listing.property.owner?.userId === userId;
+
+    if (!isClient && !isAgent && !isOwner) {
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (user?.role !== Role.ADMIN) {
+        throw new ForbiddenException("Vous n'êtes pas autorisé à modifier cette visite.");
+      }
+    }
+
+    // Si on confirme, vérifier à nouveau l'absence de conflit
+    if (dto.status === VisitStatus.CONFIRMED && visit.status !== VisitStatus.CONFIRMED) {
+      await this.assertNoSchedulingConflict(
+        visit.listingId,
+        visit.agentId || undefined,
+        visit.scheduledAt,
+        visit.duration || 45,
+        visit.id,
+      );
+    }
+
+    const updated = await this.prisma.visit.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        ...(dto.agentNotes !== undefined && { agentNotes: dto.agentNotes }),
+        ...(dto.cancelReason !== undefined && { cancelReason: dto.cancelReason }),
+      },
+      include: {
+        client: true,
+        agent: { include: { user: true } },
+        listing: {
+          include: {
+            price: true,
+            property: {
+              include: {
+                location: true,
+                media: { where: { isPrimary: true }, take: 1 },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // ── NOTIFICATIONS MULTI-CANAUX SELON L'ACTION ──
+    const listingTitle = updated.listing.title || updated.listing.property.title;
+
+    if (dto.status === VisitStatus.CONFIRMED && visit.clientId) {
+      // Notifier le client de la confirmation
+      await this.notificationsService.notifyVisitConfirmed({
+        recipientUserId: visit.clientId,
+        listingTitle,
+        visitDate: updated.scheduledAt,
+        visitId: updated.id,
+      });
+    } else if (dto.status === VisitStatus.CANCELLED || dto.status === VisitStatus.REJECTED) {
+      // Notifier l'autre partie
+      const targetUserId = isClient
+        ? updated.listing.property.agent?.userId || updated.listing.property.owner?.userId
+        : visit.clientId;
+
+      if (targetUserId) {
+        await this.notificationsService.notifyVisitCancelled({
+          recipientUserId: targetUserId,
+          listingTitle,
+          reason: dto.cancelReason,
+          visitId: updated.id,
+        });
+      }
+    }
+
+    return this.mapToDto(updated);
+  }
+
+  /**
+   * Lister les visites du client connecté
+   */
+  async getMyClientVisits(
+    clientId: string,
+    page = 1,
+    limit = 12,
+    status?: VisitStatus,
+  ): Promise<{ items: VisitResponseDto[]; total: number; page: number; totalPages: number }> {
+    const skip = (page - 1) * limit;
+
+    const [visits, total] = await Promise.all([
+      this.prisma.visit.findMany({
+        where: {
+          clientId,
+          ...(status && { status }),
+        },
+        skip,
+        take: limit,
+        orderBy: { scheduledAt: 'asc' },
+        include: {
+          client: true,
+          agent: { include: { user: true } },
+          listing: {
+            include: {
+              price: true,
+              property: {
+                include: {
+                  location: true,
+                  media: { where: { isPrimary: true }, take: 1 },
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.visit.count({
+        where: {
+          clientId,
+          ...(status && { status }),
+        },
+      }),
+    ]);
+
+    return {
+      items: visits.map((v) => this.mapToDto(v)),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit) || 1,
+    };
+  }
+
+  /**
+   * Agenda & planning pour l'agent ou le propriétaire
+   */
+  async getAgendaVisits(
+    userId: string,
+    role: Role,
+    status?: VisitStatus,
+    fromDate?: string,
+    toDate?: string,
+    page = 1,
+    limit = 50,
+  ): Promise<{ items: VisitResponseDto[]; total: number }> {
+    const skip = (page - 1) * limit;
+
+    let whereClause: Record<string, unknown> = {};
 
     if (role === Role.ADMIN) {
-      where = { ...(status ? { status } : {}) };
+      whereClause = {};
     } else if (role === Role.AGENT) {
       const agent = await this.prisma.agent.findUnique({ where: { userId } });
-      if (!agent) return [];
-      where = { agentId: agent.id, ...(status ? { status } : {}) };
+      if (!agent) return { items: [], total: 0 };
+      whereClause = { agentId: agent.id };
     } else if (role === Role.OWNER) {
       const owner = await this.prisma.owner.findUnique({ where: { userId } });
-      if (!owner) return [];
-      where = {
+      if (!owner) return { items: [], total: 0 };
+      whereClause = {
         listing: {
           property: {
             ownerId: owner.id,
           },
         },
-        ...(status ? { status } : {}),
       };
     } else {
-      // default empty
-      return [];
+      whereClause = {
+        OR: [
+          { listing: { property: { owner: { userId } } } },
+          { agent: { userId } },
+        ],
+      };
     }
 
-    return this.prisma.visit.findMany({ where, orderBy: { scheduledAt: 'desc' }, include: { listing: true, client: true, agent: true } });
+    if (status) {
+      whereClause.status = status;
+    }
+
+    if (fromDate || toDate) {
+      whereClause.scheduledAt = {
+        ...(fromDate && { gte: new Date(fromDate) }),
+        ...(toDate && { lte: new Date(toDate) }),
+      };
+    }
+
+    const [visits, total] = await Promise.all([
+      this.prisma.visit.findMany({
+        where: whereClause,
+        skip,
+        take: limit,
+        orderBy: { scheduledAt: 'asc' },
+        include: {
+          client: true,
+          agent: { include: { user: true } },
+          listing: {
+            include: {
+              price: true,
+              property: {
+                include: {
+                  location: true,
+                  media: { where: { isPrimary: true }, take: 1 },
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.visit.count({ where: whereClause }),
+    ]);
+
+    return {
+      items: visits.map((v) => this.mapToDto(v)),
+      total,
+    };
   }
 
-  async find(filter: { clientId?: string; agentId?: string; listingId?: string }) {
-    const where: any = {};
-    if (filter.clientId) where.clientId = filter.clientId;
-    if (filter.agentId) where.agentId = filter.agentId;
-    if (filter.listingId) where.listingId = filter.listingId;
-
-    return this.prisma.visit.findMany({ where, orderBy: { scheduledAt: 'desc' }, include: { listing: true, client: true, agent: true } });
-  }
-
-  async updateStatus(id: string, user: { id: string; role: Role } | null, dto: UpdateVisitStatusDto) {
-    const visit = await this.prisma.visit.findUnique({ where: { id }, include: { listing: { include: { property: true } }, agent: true } });
-    if (!visit) throw new NotFoundException('Visite introuvable');
-
-    // Permission matrix:
-    // - Client can cancel their own visit => set CANCELLED_BY_CLIENT
-    // - Agent (assigned) can confirm, cancel by agent, complete
-    // - Owner of property can cancel by agent / confirm
-    // - Admin can do anything
-
-    const requestedStatus = dto.status ?? visit.status;
-
-    // If user is null or undefined, deny
-    if (!user) throw new ForbiddenException('Authentication required');
-
-    const isClientOwner = visit.clientId === user.id && user.role === Role.CLIENT;
-
-    const isAssignedAgent = visit.agentId && visit.agent && visit.agent.userId === user.id && user.role === Role.AGENT;
-
-    const isOwner = visit.listing?.property?.ownerId
-      ? (await this.prisma.owner.findUnique({ where: { id: visit.listing.property.ownerId } }))?.userId === user.id && user.role === Role.OWNER
-      : false;
-
-    const isAdmin = user.role === Role.ADMIN;
-
-    // Client-only actions
-    if (user.role === Role.CLIENT) {
-      if (!isClientOwner) throw new ForbiddenException('Can only modify your own visits');
-      if (requestedStatus !== VisitStatus.CANCELLED_BY_CLIENT) {
-        throw new ForbiddenException('Clients can only cancel their visits');
-      }
-    }
-
-    // Agent/Owner actions: allow confirm, cancel by agent, complete
-    if (user.role === Role.AGENT || user.role === Role.OWNER) {
-      if (!(isAssignedAgent || isOwner || isAdmin)) {
-        throw new ForbiddenException('Not allowed to modify this visit');
-      }
-      const allowed = [VisitStatus.CONFIRMED, VisitStatus.CANCELLED_BY_AGENT, VisitStatus.COMPLETED, VisitStatus.NO_SHOW];
-      if (!allowed.includes(requestedStatus as VisitStatus) && !isAdmin) {
-        throw new ForbiddenException('Not allowed to set this status');
-      }
-    }
-
-    // Admin can do anything; if reached here and role not matched, deny
-    if (![Role.ADMIN, Role.AGENT, Role.OWNER, Role.CLIENT].includes(user.role)) {
-      throw new ForbiddenException('Not allowed');
-    }
-
-    const updated = await this.prisma.visit.update({
+  /**
+   * Consulter le détail d'une visite
+   */
+  async findOne(userId: string, id: string): Promise<VisitResponseDto> {
+    const visit = await this.prisma.visit.findUnique({
       where: { id },
-      data: { status: requestedStatus, agentNotes: dto.reason ?? visit.agentNotes, cancelReason: dto.reason ?? visit.cancelReason },
-      include: { client: true, listing: true, agent: true },
+      include: {
+        client: true,
+        agent: { include: { user: true } },
+        listing: {
+          include: {
+            price: true,
+            property: {
+              include: {
+                agent: true,
+                owner: true,
+                location: true,
+                media: { where: { isPrimary: true }, take: 1 },
+              },
+            },
+          },
+        },
+      },
     });
 
-    // Notify client when status changes
-    if (updated.clientId) {
-      await this.prisma.notification.create({
-        data: {
-          userId: updated.clientId,
-          type: requestedStatus === VisitStatus.CONFIRMED ? NotificationType.VISIT_CONFIRMED : NotificationType.VISIT_CANCELLED,
-          title: requestedStatus === VisitStatus.CONFIRMED ? 'Visite confirmée' : 'Visite annulée',
-          content: `La visite pour l'annonce ${updated.listingId} a été mise à jour: ${requestedStatus}`,
-          metadata: { visitId: updated.id, listingId: updated.listingId },
-        },
-      });
+    if (!visit) {
+      throw new NotFoundException(`Visite avec l'ID ${id} non trouvée.`);
     }
 
-    return updated;
+    return this.mapToDto(visit);
+  }
+
+  /**
+   * Supprimer une visite
+   */
+  async remove(userId: string, id: string): Promise<{ success: boolean; message: string }> {
+    await this.findOne(userId, id);
+    await this.prisma.visit.delete({ where: { id } });
+    return { success: true, message: 'Visite supprimée avec succès.' };
+  }
+
+  /**
+   * Helper : Vérification stricte des conflits de réservation
+   */
+  private async assertNoSchedulingConflict(
+    listingId: string,
+    agentId: string | undefined,
+    startTime: Date,
+    durationMinutes: number,
+    excludeVisitId?: string,
+  ): Promise<void> {
+    const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+
+    // 1. Conflit sur l'annonce même
+    const conflictingPropertyVisits = await this.prisma.visit.findMany({
+      where: {
+        listingId,
+        ...(excludeVisitId && { id: { not: excludeVisitId } }),
+        status: { in: [VisitStatus.REQUESTED, VisitStatus.CONFIRMED] },
+        scheduledAt: {
+          lt: endTime,
+        },
+      },
+      select: {
+        id: true,
+        scheduledAt: true,
+        duration: true,
+      },
+    });
+
+    const hasListingConflict = conflictingPropertyVisits.some((v) => {
+      const vStart = new Date(v.scheduledAt).getTime();
+      const vEnd = vStart + (v.duration || 45) * 60 * 1000;
+      return startTime.getTime() < vEnd && endTime.getTime() > vStart;
+    });
+
+    if (hasListingConflict) {
+      throw new ConflictException(
+        'Ce bien fait déjà l’objet d’une visite programmée sur ce créneau horaire.',
+      );
+    }
+
+    // 2. Conflit sur l'agenda de l'agent
+    if (agentId) {
+      const conflictingAgentVisits = await this.prisma.visit.findMany({
+        where: {
+          agentId,
+          ...(excludeVisitId && { id: { not: excludeVisitId } }),
+          status: { in: [VisitStatus.CONFIRMED] },
+          scheduledAt: {
+            lt: endTime,
+          },
+        },
+        select: {
+          id: true,
+          scheduledAt: true,
+          duration: true,
+        },
+      });
+
+      const hasAgentConflict = conflictingAgentVisits.some((v) => {
+        const vStart = new Date(v.scheduledAt).getTime();
+        const vEnd = vStart + (v.duration || 45) * 60 * 1000;
+        return startTime.getTime() < vEnd && endTime.getTime() > vStart;
+      });
+
+      if (hasAgentConflict) {
+        throw new ConflictException(
+          'Le conseiller immobilier est déjà engagé sur un autre rendez-vous à cet horaire.',
+        );
+      }
+    }
+  }
+
+  /**
+   * Helper DTO mapping
+   */
+  private mapToDto(v: {
+    id: string;
+    listingId: string;
+    clientId: string;
+    agentId: string | null;
+    scheduledAt: Date;
+    duration: number | null;
+    type: string;
+    status: VisitStatus;
+    clientNotes: string | null;
+    agentNotes: string | null;
+    cancelReason: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    client?: {
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+    } | null;
+    agent?: {
+      id: string;
+      user?: {
+        firstName: string | null;
+        lastName: string | null;
+        email: string;
+        phone: string | null;
+      };
+    } | null;
+    listing?: {
+      id: string;
+      title: string | null;
+      transactionType: string;
+      price?: { price: number } | null;
+      property: {
+        title: string;
+        location: { city: string };
+        media: Array<{ url: string }>;
+      };
+    } | null;
+  }): VisitResponseDto {
+    const agentName = v.agent?.user
+      ? [v.agent.user.firstName, v.agent.user.lastName].filter(Boolean).join(' ')
+      : undefined;
+
+    return {
+      id: v.id,
+      listingId: v.listingId,
+      clientId: v.clientId,
+      agentId: v.agentId,
+      scheduledAt: v.scheduledAt,
+      duration: v.duration || 45,
+      type: v.type as unknown as VisitResponseDto['type'],
+      status: v.status,
+      clientNotes: v.clientNotes,
+      agentNotes: v.agentNotes,
+      cancelReason: v.cancelReason,
+      createdAt: v.createdAt,
+      updatedAt: v.updatedAt,
+      client: v.client
+        ? {
+            id: v.client.id,
+            email: v.client.email,
+            firstName: v.client.firstName,
+            lastName: v.client.lastName,
+            phone: v.client.phone,
+          }
+        : null,
+      agent: v.agent
+        ? {
+            id: v.agent.id,
+            name: agentName || 'Conseiller',
+            email: v.agent.user?.email,
+            phone: v.agent.user?.phone || undefined,
+          }
+        : null,
+      listing: v.listing
+        ? {
+            id: v.listing.id,
+            title: v.listing.title || v.listing.property.title,
+            transactionType: v.listing.transactionType,
+            city: v.listing.property.location.city,
+            primaryPhotoUrl: v.listing.property.media[0]?.url,
+            price: v.listing.price?.price,
+          }
+        : null,
+    };
   }
 }

@@ -6,6 +6,213 @@ export type PropertyStatus = 'AVAILABLE' | 'UNDER_OFFER' | 'RENTED' | 'SOLD' | '
 export type ListingStatus = 'DRAFT' | 'PENDING_REVIEW' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'COMPLETED' | 'CANCELLED';
 export type MediaType = 'IMAGE' | 'VIDEO' | 'VIRTUAL_TOUR' | 'FLOOR_PLAN' | 'DOCUMENT';
 export type InquiryStatus = 'NEW' | 'CONTACTED' | 'IN_PROGRESS' | 'ANSWERED' | 'CLOSED';
+export type VisitStatus = 'REQUESTED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'REJECTED';
+export type VisitType = 'IN_PERSON' | 'VIRTUAL';
+export type ApplicationStatus =
+  | 'APPLICATION'
+  | 'DOCUMENT_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CONTRACT_PENDING'
+  | 'ACTIVE'
+  | 'TERMINATED'
+  | 'CANCELLED';
+export type ContractStatus =
+  | 'DRAFT'
+  | 'PENDING_SIGNATURE'
+  | 'ACTIVE'
+  | 'RENEWED'
+  | 'TERMINATED'
+  | 'EXPIRED'
+  | 'CANCELLED';
+export type PaymentStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'REFUNDED'
+  | 'OVERDUE';
+
+// ─── Rental & Tenant Application ─────────────────────────────────────────────
+
+export interface RentalDocument {
+  id: string;
+  type: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize?: number | null;
+  mimeType?: string | null;
+  isVerified: boolean;
+  verifiedAt?: string | null;
+  createdAt: string;
+}
+
+export interface RentScheduleItem {
+  id: string;
+  period: string;
+  dueDate: string;
+  rentAmount: number;
+  chargesAmount: number;
+  totalAmount: number;
+  status: PaymentStatus;
+  paidAt?: string | null;
+  receiptUrl?: string | null;
+}
+
+export interface RentalContract {
+  id: string;
+  contractNumber: string;
+  status: ContractStatus;
+  signedByTenant: boolean;
+  signedByLandlord: boolean;
+  signedAt?: string | null;
+  terms?: string | null;
+  documentUrl?: string | null;
+}
+
+export interface RentalDetails {
+  id: string;
+  listingId: string;
+  monthlyRent: number;
+  deposit?: number | null;
+  charges?: number | null;
+  status: string;
+  startDate: string;
+  endDate?: string | null;
+  contract?: RentalContract | null;
+  schedules?: RentScheduleItem[];
+}
+
+export interface RentalApplication {
+  id: string;
+  listingId: string;
+  tenantId: string;
+  agentId?: string | null;
+  landlordId: string;
+  status: ApplicationStatus;
+  monthlyIncome: number;
+  employmentStatus: string;
+  employer?: string | null;
+  guarantorName?: string | null;
+  guarantorIncome?: number | null;
+  comments?: string | null;
+  rejectionReason?: string | null;
+  reviewedAt?: string | null;
+  approvedAt?: string | null;
+  rentalId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  documents: RentalDocument[];
+  tenant?: {
+    id: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+  } | null;
+  listing?: {
+    id: string;
+    title: string;
+    city?: string;
+    primaryPhotoUrl?: string;
+    monthlyRent?: number;
+    charges?: number;
+    deposit?: number;
+  } | null;
+  rental?: RentalDetails | null;
+}
+
+export interface CreateRentalApplicationPayload {
+  listingId: string;
+  monthlyIncome: number;
+  employmentStatus: string;
+  employer?: string;
+  guarantorName?: string;
+  guarantorIncome?: number;
+  comments?: string;
+  documents?: Array<{
+    type: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize?: number;
+    mimeType?: string;
+  }>;
+}
+
+export interface UpdateApplicationStatusPayload {
+  status: ApplicationStatus;
+  rejectionReason?: string;
+  startDate?: string;
+  endDate?: string;
+  monthlyRent?: number;
+  charges?: number;
+  deposit?: number;
+  terms?: string;
+}
+
+// ─── Visits ──────────────────────────────────────────────────────────────────
+
+export interface Visit {
+  id: string;
+  listingId: string;
+  clientId: string;
+  agentId?: string | null;
+  scheduledAt: string;
+  duration: number;
+  type: VisitType;
+  status: VisitStatus;
+  clientNotes?: string | null;
+  agentNotes?: string | null;
+  cancelReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  client?: {
+    id: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+  } | null;
+  agent?: {
+    id: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+  } | null;
+  listing?: {
+    id: string;
+    title: string;
+    transactionType: string;
+    city?: string;
+    primaryPhotoUrl?: string;
+    price?: number;
+  } | null;
+}
+
+export interface CreateVisitPayload {
+  listingId: string;
+  scheduledAt: string;
+  duration?: number;
+  type?: VisitType;
+  clientNotes?: string;
+}
+
+export interface UpdateVisitStatusPayload {
+  status: VisitStatus;
+  agentNotes?: string;
+  cancelReason?: string;
+}
+
+export interface AvailabilitySlot {
+  time: string;
+  isAvailable: boolean;
+  reason?: string;
+}
+
+export interface DayAvailability {
+  date: string;
+  slots: AvailabilitySlot[];
+}
 
 // ─── Inquiries ───────────────────────────────────────────────────────────────
 
@@ -52,6 +259,92 @@ export interface CreateInquiryPayload {
 export interface UpdateInquiryStatusPayload {
   status: InquiryStatus;
   response?: string;
+}
+
+// ─── Owner Dashboard Types ───────────────────────────────────────────────────
+
+export interface OwnerDashboardStats {
+  totalProperties: number;
+  activeListings: number;
+  draftListings: number;
+  soldProperties: number;
+  rentedProperties: number;
+  totalInquiries: number;
+  pendingInquiries: number;
+  totalVisits: number;
+  upcomingVisits: number;
+  totalViews: number;
+  monthlyRentalIncome: number;
+  recentInquiries?: Array<{
+    id: string;
+    subject: string;
+    name?: string | null;
+    email?: string | null;
+    status: string;
+    createdAt: string;
+    listingTitle: string;
+  }>;
+  recentVisits?: Array<{
+    id: string;
+    scheduledAt: string;
+    type: string;
+    status: string;
+    clientName: string;
+    listingTitle: string;
+  }>;
+}
+
+export interface OwnerProperty {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: PropertyStatus;
+  area: number;
+  rooms?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  createdAt: string;
+  type?: { name: string; slug: string } | null;
+  location: {
+    city: string;
+    zipCode: string;
+    neighborhood?: string | null;
+    country: string;
+  };
+  media: Array<{ url: string; isPrimary: boolean }>;
+  listings: Array<{
+    id: string;
+    transactionType: TransactionType;
+    status: ListingStatus;
+    price?: { price: number; formatted?: string } | null;
+  }>;
+}
+
+export interface OwnerListing {
+  id: string;
+  transactionType: TransactionType;
+  status: ListingStatus;
+  title?: string | null;
+  viewsCount: number;
+  createdAt: string;
+  price?: {
+    price: number;
+    formatted?: string;
+    charges?: number | null;
+  } | null;
+  property: {
+    title: string;
+    area: number;
+    rooms?: number | null;
+    type?: { name: string } | null;
+    location: { city: string };
+    media: Array<{ url: string }>;
+  };
+  _count?: {
+    inquiries: number;
+    visits: number;
+    favorites: number;
+  };
 }
 
 // ─── User & Auth ─────────────────────────────────────────────────────────────
@@ -298,3 +591,393 @@ export interface ListingSearchFilters {
   page?: number;
   limit?: number;
 }
+
+// ─── Owner Dashboard Types ───────────────────────────────────────────────────
+
+export interface OwnerDashboardStats {
+  totalProperties: number;
+  activeListings: number;
+  draftListings: number;
+  soldProperties: number;
+  rentedProperties: number;
+  totalInquiries: number;
+  pendingInquiries: number;
+  totalVisits: number;
+  upcomingVisits: number;
+  totalViews: number;
+  monthlyRentalIncome: number;
+  recentInquiries?: Array<{
+    id: string;
+    subject: string;
+    name?: string | null;
+    email?: string | null;
+    status: string;
+    createdAt: string;
+    listingTitle: string;
+  }>;
+  recentVisits?: Array<{
+    id: string;
+    scheduledAt: string;
+    type: string;
+    status: string;
+    clientName: string;
+    listingTitle: string;
+  }>;
+}
+
+export interface OwnerProperty {
+  id: string;
+  title: string;
+  description: string;
+  status: PropertyStatus;
+  yearBuilt?: number | null;
+  floor?: number | null;
+  totalFloors?: number | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  rooms?: number | null;
+  area: number;
+  landArea?: number | null;
+  parkingSpaces?: number | null;
+  energyRating?: string | null;
+  ghgRating?: string | null;
+  isFurnished: boolean;
+  hasElevator: boolean;
+  hasBalcony: boolean;
+  hasGarden: boolean;
+  hasPool: boolean;
+  hasGarage: boolean;
+  createdAt: string;
+  updatedAt: string;
+  type?: {
+    id: string;
+    name: string;
+    slug: string;
+  };
+  location?: {
+    id: string;
+    address: string;
+    city: string;
+    zipCode: string;
+    country: string;
+  };
+  media?: Array<{
+    id: string;
+    url: string;
+    type: string;
+    isPrimary: boolean;
+  }>;
+  listings?: Array<{
+    id: string;
+    title?: string | null;
+    status: ListingStatus;
+    transactionType: TransactionType;
+    price?: {
+      price: number;
+      currency: string;
+      charges?: number | null;
+    } | null;
+  }>;
+}
+
+export interface OwnerListing {
+  id: string;
+  title?: string | null;
+  slug?: string | null;
+  status: ListingStatus;
+  transactionType: TransactionType;
+  isFeatured: boolean;
+  viewsCount: number;
+  createdAt: string;
+  publishedAt?: string | null;
+  price?: {
+    price: number;
+    currency: string;
+    charges?: number | null;
+    deposit?: number | null;
+  } | null;
+  property: {
+    id: string;
+    title: string;
+    area: number;
+    rooms?: number | null;
+    bedrooms?: number | null;
+    type?: {
+      id: string;
+      name: string;
+    } | null;
+    location?: {
+      id: string;
+      address: string;
+      city: string;
+      zipCode: string;
+    } | null;
+    media?: Array<{
+      id: string;
+      url: string;
+      isPrimary: boolean;
+    }>;
+  };
+  _count?: {
+    inquiries: number;
+    visits: number;
+    favorites: number;
+  };
+}
+
+// ─── Agent & Agency Admin Types ───────────────────────────────────────────────
+
+export interface AgentDashboardStats {
+  isAgencyAdmin: boolean;
+  agencyName?: string;
+  totalProperties: number;
+  activeListings: number;
+  draftListings: number;
+  totalInquiries: number;
+  pendingInquiries: number;
+  totalVisits: number;
+  upcomingVisits: number;
+  totalClients: number;
+  totalSales: number;
+  totalRentals: number;
+  totalCommissionsEarned: number;
+  pendingCommissions: number;
+  teamMembersCount: number;
+  recentInquiries?: Array<{
+    id: string;
+    subject: string;
+    name?: string | null;
+    email?: string | null;
+    status: string;
+    createdAt: string;
+    listingTitle: string;
+  }>;
+  recentVisits?: Array<{
+    id: string;
+    scheduledAt: string;
+    type: string;
+    status: string;
+    clientName: string;
+    listingTitle: string;
+  }>;
+  recentTransactions?: Array<{
+    id: string;
+    type: 'SALE' | 'RENTAL';
+    title: string;
+    amount: number;
+    status: string;
+    date: string;
+    clientName: string;
+  }>;
+}
+
+export interface AgentClient {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  category: 'ACHETEUR' | 'LOCATAIRE' | 'PROPRIETAIRE' | 'PROSPECT';
+  lastInteraction?: string;
+  interactionsCount: number;
+  assignedAgentName?: string;
+}
+
+export interface AgentTransaction {
+  id: string;
+  type: 'SALE' | 'RENTAL';
+  title: string;
+  propertyId: string;
+  status: string;
+  amount: number;
+  commissionAmount?: number;
+  commissionStatus?: string;
+  clientName: string;
+  agentName?: string;
+  createdAt: string;
+}
+
+export interface AgentCommission {
+  id: string;
+  amount: number;
+  percentage?: number;
+  currency: string;
+  status: 'PENDING' | 'INVOICED' | 'PAID' | 'CANCELLED';
+  invoiceNumber?: string;
+  paidAt?: string;
+  createdAt: string;
+  agentName?: string;
+  transactionTitle?: string;
+  transactionType?: 'SALE' | 'RENTAL';
+}
+
+export interface AgencyTeamMember {
+  id: string;
+  userId: string;
+  title?: string;
+  licenseNumber?: string;
+  biography?: string;
+  specialties?: string[];
+  yearsExperience?: number;
+  isAvailable: boolean;
+  rating?: number;
+  reviewCount?: number;
+  createdAt: string;
+  user: {
+    id: string;
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    avatarUrl?: string;
+    role: string;
+    isActive: boolean;
+  };
+  _count?: {
+    properties: number;
+    visits: number;
+    inquiries: number;
+    sales: number;
+    rentals: number;
+  };
+}
+
+// ─── Admin Dashboard Types ───────────────────────────────────────────────────
+
+export interface AdminDashboardStats {
+  totalUsers: number;
+  usersByRole: Record<string, number>;
+  totalAgencies: number;
+  totalProperties: number;
+  totalListings: number;
+  activeListings: number;
+  totalSales: number;
+  totalRentals: number;
+  totalTransactionVolume: number;
+  totalCommissions: number;
+  platformRevenue: number;
+  recentUsers?: Array<{
+    id: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    role: string;
+    createdAt: string;
+    isActive: boolean;
+  }>;
+  recentTransactions?: Array<{
+    id: string;
+    type: 'SALE' | 'RENTAL';
+    title: string;
+    amount: number;
+    status: string;
+    createdAt: string;
+  }>;
+  monthlyGrowth?: Array<{
+    month: string;
+    usersCount: number;
+    listingsCount: number;
+    salesVolume: number;
+  }>;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  phone?: string | null;
+  role: string;
+  isActive: boolean;
+  isVerified: boolean;
+  createdAt: string;
+  lastLoginAt?: string | null;
+}
+
+export interface AdminAgency {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  isVerified: boolean;
+  isActive: boolean;
+  agentsCount: number;
+  propertiesCount: number;
+  createdAt: string;
+}
+
+export interface AdminPayment {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  method?: string | null;
+  description?: string | null;
+  dueDate: string;
+  paidAt?: string | null;
+  userEmail: string;
+  createdAt: string;
+}
+
+export interface AdminSettings {
+  platformName: string;
+  defaultCurrency: string;
+  defaultCommissionRate: number;
+  maintenanceMode: boolean;
+  requireAgencyVerification: boolean;
+  maxMediaPerListing: number;
+  supportEmail: string;
+  updatedAt: string;
+}
+
+// ─── Notifications ─────────────────────────────────────────────────────────
+
+export type NotificationType =
+  | 'NEW_INQUIRY'
+  | 'VISIT_REQUESTED'
+  | 'VISIT_CONFIRMED'
+  | 'VISIT_CANCELLED'
+  | 'LISTING_APPROVED'
+  | 'LISTING_REJECTED'
+  | 'NEW_MESSAGE'
+  | 'PAYMENT_RECEIVED'
+  | 'PAYMENT_FAILED'
+  | 'SAVED_SEARCH_MATCH'
+  | 'VISIT_REQUEST'
+  | 'MESSAGE_RECEIVED'
+  | 'INQUIRY_RECEIVED'
+  | 'PAYMENT_OVERDUE'
+  | 'CONTRACT_CREATED'
+  | 'CONTRACT_EXPIRING'
+  | 'LISTING_STATUS_CHANGE'
+  | 'FAVORITE_PRICE_DROP'
+  | 'SYSTEM';
+
+export type NotificationChannel = 'IN_APP' | 'EMAIL' | 'SMS' | 'WHATSAPP';
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  channel: NotificationChannel;
+  title: string;
+  content: string;
+  link?: string | null;
+  metadata?: Record<string, any> | null;
+  isRead: boolean;
+  readAt?: string | null;
+  createdAt: string;
+}
+
+export interface NotificationPagination {
+  items: AppNotification[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  unreadCount: number;
+}
+
+
+
+

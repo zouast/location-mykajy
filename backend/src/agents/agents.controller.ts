@@ -4,8 +4,9 @@ import {
   ApiOperation,
   ApiResponse,
   ApiTags,
+  ApiQuery,
 } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import { CommissionStatus, Role } from '@prisma/client';
 import { AgentsService } from './agents.service';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -21,13 +22,87 @@ import {
   PaginatedAgentPropertiesResponseDto,
 } from './dto/agent-response.dto';
 import { AgencyResponseDto } from '../agencies/dto/agency-response.dto';
+import {
+  AgentDashboardStatsDto,
+  AgentClientDto,
+  AgentTransactionDto,
+  AgentCommissionDto,
+} from './dto/agent-dashboard.dto';
 
 @ApiTags('Agents')
 @ApiBearerAuth()
-@Roles(Role.AGENT, Role.AGENCY_ADMIN)
+@Roles(Role.AGENT, Role.AGENCY_ADMIN, Role.ADMIN)
 @Controller('agents')
 export class AgentsController {
   constructor(private readonly agentsService: AgentsService) {}
+
+  @Get('dashboard/stats')
+  @ApiOperation({
+    summary: 'Obtenir les statistiques clés du dashboard (AGENT / AGENCY_ADMIN)',
+  })
+  @ApiResponse({
+    status: 200,
+    type: AgentDashboardStatsDto,
+  })
+  async getDashboardStats(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<AgentDashboardStatsDto> {
+    return this.agentsService.getDashboardStats(user);
+  }
+
+  @Get('clients')
+  @ApiOperation({
+    summary: 'Consulter l’annuaire CRM des clients et prospects (AGENT / AGENCY_ADMIN)',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 15 })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  async getClients(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 15;
+    return this.agentsService.getClients(user, pageNum, limitNum, search);
+  }
+
+  @Get('transactions')
+  @ApiOperation({
+    summary: 'Consulter les transactions de vente et location (AGENT / AGENCY_ADMIN)',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 15 })
+  @ApiQuery({ name: 'type', required: false, enum: ['SALE', 'RENTAL'] })
+  async getTransactions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('type') type?: 'SALE' | 'RENTAL',
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 15;
+    return this.agentsService.getTransactions(user, pageNum, limitNum, type);
+  }
+
+  @Get('commissions')
+  @ApiOperation({
+    summary: 'Consulter les honoraires & commissions (AGENT: perso / AGENCY_ADMIN: agence)',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 15 })
+  @ApiQuery({ name: 'status', required: false, enum: CommissionStatus })
+  async getCommissions(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: CommissionStatus,
+  ) {
+    const pageNum = page ? parseInt(page, 10) : 1;
+    const limitNum = limit ? parseInt(limit, 10) : 15;
+    return this.agentsService.getCommissions(user, pageNum, limitNum, status);
+  }
 
   @Get('me')
   @ApiOperation({

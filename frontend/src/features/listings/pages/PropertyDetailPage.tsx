@@ -3,6 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { listingsService } from '@/services/listings.service';
 import { inquiriesService } from '@/services/inquiries.service';
+import { VisitBookingModal } from '@/features/visits/components/VisitBookingModal';
+import { RentalApplicationModal } from '@/features/rentals/components/RentalApplicationModal';
 import { PropertyCard } from '../components/PropertyCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +32,7 @@ import {
   Check,
   Maximize,
   ExternalLink,
+  FileText,
 } from 'lucide-react';
 
 export default function PropertyDetailPage() {
@@ -39,6 +42,7 @@ export default function PropertyDetailPage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [showVisitModal, setShowVisitModal] = useState(false);
+  const [showApplyModal, setShowApplyModal] = useState(false);
   const [visitSent, setVisitSent] = useState(false);
   const [contactSent, setContactSent] = useState(false);
   const [sendingInquiry, setSendingInquiry] = useState(false);
@@ -522,7 +526,7 @@ Proche de toutes commodités, des écoles, des commerces et des transports en co
               )}
             </div>
 
-            {/* Section 13 : Demander une visite (Bouton Principal) */}
+            {/* Section 13 : Demander une visite & Déposer un dossier */}
             <div className="space-y-3 pt-2">
               <Button
                 onClick={() => setShowVisitModal(true)}
@@ -530,6 +534,16 @@ Proche de toutes commodités, des écoles, des commerces et des transports en co
               >
                 <Calendar className="mr-2 h-4 w-4" /> Demander une visite
               </Button>
+
+              {listing.transactionType === 'RENT' && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowApplyModal(true)}
+                  className="w-full rounded-2xl border-indigo-600/40 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 py-6 font-bold text-sm"
+                >
+                  <FileText className="mr-2 h-4 w-4" /> Déposer mon dossier locataire
+                </Button>
+              )}
 
               {/* Section 11 : Formulaire de contact direct */}
               <div className="rounded-2xl bg-muted/40 p-4 border border-border/60">
@@ -636,100 +650,24 @@ Proche de toutes commodités, des écoles, des commerces et des transports en co
         )}
       </div>
 
-      {/* ── Section 13 : Modal Demande de visite ── */}
-      {showVisitModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-md rounded-3xl bg-card p-6 shadow-2xl ring-1 ring-border animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-border/60 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-indigo-600" />
-                <h3 className="font-bold text-foreground text-base">Planifier une visite</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowVisitModal(false);
-                  setVisitSent(false);
-                }}
-                className="text-muted-foreground hover:text-foreground text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
+      {/* ── Section 13 : Modal Demande de visite avec créneaux en direct ── */}
+      <VisitBookingModal
+        listingId={listing.id}
+        listingTitle={listing.title || property.title}
+        isOpen={showVisitModal}
+        onClose={() => setShowVisitModal(false)}
+      />
 
-            {visitSent ? (
-              <div className="py-6 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mx-auto mb-3">
-                  <Check className="h-6 w-6" />
-                </div>
-                <h4 className="font-bold text-foreground">Demande de visite confirmée !</h4>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  L'agence a bien reçu votre créneau souhaité et va vous contacter pour confirmer l'heure précise.
-                </p>
-                <Button
-                  onClick={() => setShowVisitModal(false)}
-                  className="mt-6 w-full rounded-xl bg-indigo-600 text-white font-semibold"
-                >
-                  Fermer
-                </Button>
-              </div>
-            ) : (
-              <form onSubmit={handleVisitSubmit} className="space-y-4">
-                <p className="text-xs text-muted-foreground">
-                  Choisissez vos préférences pour visiter <strong>{listing.title || property.title}</strong>.
-                </p>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Date souhaitée</label>
-                  <Input
-                    type="date"
-                    required
-                    value={visitDate}
-                    onChange={(e) => setVisitDate(e.target.value)}
-                    className="rounded-xl text-xs"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Créneau horaire</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: 'Matin (9h - 12h)', value: 'morning' },
-                      { label: 'Après-midi (14h - 18h)', value: 'afternoon' },
-                    ].map((slot) => (
-                      <button
-                        key={slot.value}
-                        type="button"
-                        onClick={() => setVisitTimeSlot(slot.value)}
-                        className={`rounded-xl border p-2.5 text-xs font-semibold transition-all ${
-                          visitTimeSlot === slot.value
-                            ? 'border-indigo-600 bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300'
-                            : 'border-border text-muted-foreground hover:bg-muted'
-                        }`}
-                      >
-                        {slot.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-muted-foreground">Vos coordonnées</label>
-                  <Input placeholder="Nom & Prénom" required className="rounded-xl text-xs" />
-                  <Input type="tel" placeholder="Téléphone de contact" required className="rounded-xl text-xs" />
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-white py-5 shadow-md shadow-indigo-600/20"
-                >
-                  Confirmer la demande de visite
-                </Button>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
+      {/* ── Modal Candidature Locataire & Pièces Justificatives ── */}
+      <RentalApplicationModal
+        listingId={listing.id}
+        listingTitle={listing.title || property.title}
+        monthlyRent={price.price}
+        charges={price.charges || 0}
+        deposit={price.deposit || 0}
+        isOpen={showApplyModal}
+        onClose={() => setShowApplyModal(false)}
+      />
     </div>
   );
 }

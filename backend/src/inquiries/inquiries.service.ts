@@ -7,11 +7,15 @@ import { PrismaService } from '../database/prisma.service';
 import { CreateInquiryDto } from './dto/create-inquiry.dto';
 import { UpdateInquiryStatusDto } from './dto/update-inquiry-status.dto';
 import { InquiryResponseDto } from './dto/inquiry-response.dto';
-import { InquiryStatus, NotificationType, Role } from '@prisma/client';
+import { InquiryStatus, Role } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class InquiriesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   /**
    * Créer une nouvelle demande de contact / information sur un bien
@@ -84,22 +88,17 @@ export class InquiriesService {
       },
     });
 
-    // Déclencher une notification automatique pour le destinataire
+    // Déclencher une notification multi-canaux pour le destinataire
     const targetUserId =
       listing.property.agent?.userId || listing.property.owner?.userId;
 
     if (targetUserId) {
-      await this.prisma.notification.create({
-        data: {
-          userId: targetUserId,
-          type: NotificationType.INQUIRY_RECEIVED,
-          title: 'Nouvelle demande reçue',
-          content: `Vous avez reçu un nouveau message de ${clientName || clientEmail || 'un visiteur'} concernant "${listing.title || listing.property.title}".`,
-          data: {
-            inquiryId: inquiry.id,
-            listingId: listing.id,
-          },
-        },
+      await this.notificationsService.notifyNewInquiry({
+        recipientUserId: targetUserId,
+        listingTitle: listing.title || listing.property.title,
+        senderName: clientName || clientEmail || 'Un visiteur',
+        inquiryId: inquiry.id,
+        messagePreview: dto.message?.slice(0, 100),
       });
     }
 
@@ -312,17 +311,11 @@ export class InquiriesService {
 
     // Si une réponse est apportée et que le client a un compte, lui envoyer une notification
     if (dto.response && updated.clientId) {
-      await this.prisma.notification.create({
-        data: {
-          userId: updated.clientId,
-          type: NotificationType.MESSAGE_RECEIVED,
-          title: 'Réponse à votre demande',
-          content: `L'agent a répondu à votre demande concernant "${updated.listing.title || updated.listing.property.title}".`,
-          data: {
-            inquiryId: updated.id,
-            listingId: updated.listingId,
-          },
-        },
+      await this.notificationsService.notifyNewMessage({
+        recipientUserId: updated.clientId,
+        senderName: 'L’agent en charge',
+        conversationId: updated.id,
+        messageExcerpt: dto.response.slice(0, 100),
       });
     }
 
