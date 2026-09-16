@@ -466,7 +466,7 @@ export class AgenciesService {
       const createdUser = await tx.user.create({
         data: {
           email: dto.email,
-          password: hashedPassword,
+          passwordHash: hashedPassword,
           firstName: dto.firstName,
           lastName: dto.lastName,
           phone: dto.phone,
@@ -474,6 +474,8 @@ export class AgenciesService {
           role: Role.AGENT,
           isActive: true,
           isVerified: true,
+          emailVerified: true,
+          status: 'ACTIVE',
         },
       });
 

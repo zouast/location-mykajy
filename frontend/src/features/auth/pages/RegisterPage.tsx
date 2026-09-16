@@ -7,7 +7,7 @@ import { useAuth } from '../AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Building2, Eye, EyeOff, Lock, Mail, User, Phone, CheckCircle2 } from 'lucide-react';
+import { Building2, Eye, EyeOff, Lock, Mail, Phone } from 'lucide-react';
 
 const registerSchema = z
   .object({

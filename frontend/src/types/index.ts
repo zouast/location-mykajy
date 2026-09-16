@@ -28,10 +28,30 @@ export type ContractStatus =
 export type PaymentStatus =
   | 'PENDING'
   | 'PROCESSING'
+  | 'PAID'
   | 'COMPLETED'
   | 'FAILED'
+  | 'CANCELLED'
   | 'REFUNDED'
   | 'OVERDUE';
+
+export type PaymentType =
+  | 'RENT'
+  | 'DEPOSIT'
+  | 'COMMISSION'
+  | 'DOWN_PAYMENT'
+  | 'SALE_PAYMENT'
+  | 'OTHER_FEES';
+
+export type PaymentMethod =
+  | 'STRIPE'
+  | 'CARD'
+  | 'MOBILE_MONEY'
+  | 'BANK_TRANSFER'
+  | 'MANUAL'
+  | 'CASH'
+  | 'CHECK'
+  | 'OTHER';
 
 // ─── Rental & Tenant Application ─────────────────────────────────────────────
 
@@ -259,92 +279,6 @@ export interface CreateInquiryPayload {
 export interface UpdateInquiryStatusPayload {
   status: InquiryStatus;
   response?: string;
-}
-
-// ─── Owner Dashboard Types ───────────────────────────────────────────────────
-
-export interface OwnerDashboardStats {
-  totalProperties: number;
-  activeListings: number;
-  draftListings: number;
-  soldProperties: number;
-  rentedProperties: number;
-  totalInquiries: number;
-  pendingInquiries: number;
-  totalVisits: number;
-  upcomingVisits: number;
-  totalViews: number;
-  monthlyRentalIncome: number;
-  recentInquiries?: Array<{
-    id: string;
-    subject: string;
-    name?: string | null;
-    email?: string | null;
-    status: string;
-    createdAt: string;
-    listingTitle: string;
-  }>;
-  recentVisits?: Array<{
-    id: string;
-    scheduledAt: string;
-    type: string;
-    status: string;
-    clientName: string;
-    listingTitle: string;
-  }>;
-}
-
-export interface OwnerProperty {
-  id: string;
-  title: string;
-  description?: string | null;
-  status: PropertyStatus;
-  area: number;
-  rooms?: number | null;
-  bedrooms?: number | null;
-  bathrooms?: number | null;
-  createdAt: string;
-  type?: { name: string; slug: string } | null;
-  location: {
-    city: string;
-    zipCode: string;
-    neighborhood?: string | null;
-    country: string;
-  };
-  media: Array<{ url: string; isPrimary: boolean }>;
-  listings: Array<{
-    id: string;
-    transactionType: TransactionType;
-    status: ListingStatus;
-    price?: { price: number; formatted?: string } | null;
-  }>;
-}
-
-export interface OwnerListing {
-  id: string;
-  transactionType: TransactionType;
-  status: ListingStatus;
-  title?: string | null;
-  viewsCount: number;
-  createdAt: string;
-  price?: {
-    price: number;
-    formatted?: string;
-    charges?: number | null;
-  } | null;
-  property: {
-    title: string;
-    area: number;
-    rooms?: number | null;
-    type?: { name: string } | null;
-    location: { city: string };
-    media: Array<{ url: string }>;
-  };
-  _count?: {
-    inquiries: number;
-    visits: number;
-    favorites: number;
-  };
 }
 
 // ─── User & Auth ─────────────────────────────────────────────────────────────
@@ -977,6 +911,164 @@ export interface NotificationPagination {
   totalPages: number;
   unreadCount: number;
 }
+
+// ─── Messaging & Conversations ─────────────────────────────────────────────
+
+export interface ChatParticipantUser {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  role?: Role;
+  phone?: string | null;
+}
+
+export interface ChatParticipant {
+  id: string;
+  userId: string;
+  hasUnread: boolean;
+  lastReadAt?: string | null;
+  user: ChatParticipantUser;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  content: string;
+  isRead: boolean;
+  isEdited: boolean;
+  attachmentUrl?: string | null;
+  attachmentName?: string | null;
+  attachmentSize?: number | null;
+  attachmentType?: string | null;
+  readAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sender?: ChatParticipantUser | null;
+}
+
+export interface ConversationListingSummary {
+  id: string;
+  title: string;
+  transactionType: TransactionType;
+  city?: string;
+  price?: number;
+  primaryPhotoUrl?: string | null;
+}
+
+export interface ConversationItem {
+  id: string;
+  subject?: string | null;
+  listingId?: string | null;
+  isArchived: boolean;
+  lastMessageAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  unreadCount?: number;
+  participants: ChatParticipant[];
+  lastMessage?: ChatMessage | null;
+  listing?: ConversationListingSummary | null;
+}
+
+export interface CreateConversationInput {
+  recipientId: string;
+  listingId?: string;
+  subject?: string;
+  initialMessage: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentSize?: number;
+  attachmentType?: string;
+}
+
+export interface SendMessageInput {
+  content: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentSize?: number;
+  attachmentType?: string;
+}
+
+// ─── Payment Transactions ──────────────────────────────────────────────────
+
+export interface PaymentItem {
+  id: string;
+  userId: string;
+  type: PaymentType;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  method?: PaymentMethod | null;
+  provider?: string | null;
+  providerRef?: string | null;
+  transactionRef?: string | null;
+  description: string;
+  dueDate: string;
+  paidAt?: string | null;
+  failedReason?: string | null;
+  receiptUrl?: string | null;
+  saleId?: string | null;
+  rentalId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  } | null;
+  rental?: {
+    id: string;
+    monthlyRent: number;
+    listing?: { id: string; title?: string | null } | null;
+  } | null;
+  sale?: {
+    id: string;
+    offerPrice: number;
+    listing?: { id: string; title?: string | null } | null;
+  } | null;
+}
+
+export interface PaymentSessionResponse {
+  payment: PaymentItem;
+  session: {
+    provider: 'STRIPE' | 'MOBILE_MONEY' | 'BANK_TRANSFER' | 'MANUAL';
+    providerRef: string;
+    status: PaymentStatus;
+    checkoutUrl?: string;
+    qrCodeUrl?: string;
+    ussdPromptCode?: string;
+    instructions?: string;
+  };
+}
+
+export interface InitiatePaymentInput {
+  amount: number;
+  currency?: string;
+  type: PaymentType;
+  method: PaymentMethod;
+  provider?: 'STRIPE' | 'MOBILE_MONEY' | 'BANK_TRANSFER' | 'MANUAL';
+  description: string;
+  saleId?: string;
+  rentalId?: string;
+  rentScheduleId?: string;
+  commissionId?: string;
+  returnUrl?: string;
+  cancelUrl?: string;
+  phone?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ProcessPaymentInput {
+  providerRef?: string;
+  otpCode?: string;
+  phoneNumber?: string;
+  metadata?: Record<string, any>;
+}
+
+
 
 
 

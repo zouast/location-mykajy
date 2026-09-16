@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { savedSearchesService } from '@/services/saved-searches.service';
@@ -6,21 +5,16 @@ import type { SavedSearch } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import {
   Bookmark,
   Bell,
   BellOff,
   Trash2,
   ExternalLink,
-  Search,
   Plus,
-  SlidersHorizontal,
   MapPin,
   Euro,
   Maximize2,
-  Bed,
-  CheckCircle,
 } from 'lucide-react';
 
 export default function SavedSearchesPage() {

@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { favoritesService } from '@/services/favorites.service';
 import { PropertyCard } from '@/features/listings/components/PropertyCard';
 import { Pagination } from '@/features/listings/components/Pagination';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Heart, ArrowLeft, Trash2, Building, Sparkles } from 'lucide-react';
+import { Heart, ArrowLeft } from 'lucide-react';
 
 export default function FavoritesPage() {
   const [page, setPage] = useState(1);
-  const queryClient = useQueryClient();
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['my-favorites', page],

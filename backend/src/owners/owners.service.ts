@@ -37,11 +37,11 @@ export class OwnersService {
             price: true,
             inquiries: { select: { id: true, status: true, createdAt: true, subject: true, name: true, email: true } },
             visits: { select: { id: true, status: true, scheduledAt: true, type: true, client: true } },
+            rentals: {
+              where: { status: RentalStatus.ACTIVE },
+              select: { monthlyRent: true },
+            },
           },
-        },
-        rentals: {
-          where: { status: RentalStatus.ACTIVE },
-          select: { monthlyRent: true },
         },
       },
     });
@@ -82,9 +82,9 @@ export class OwnersService {
     ).length;
 
     // 5. Revenus locatifs mensuels cumulés
-    const monthlyRentalIncome = properties.reduce((sum, p) => {
-      const propRentalTotal = p.rentals.reduce((rSum, r) => rSum + r.monthlyRent, 0);
-      return sum + propRentalTotal;
+    const monthlyRentalIncome = allListings.reduce((sum, l) => {
+      const listingRentalTotal = (l.rentals || []).reduce((rSum, r) => rSum + r.monthlyRent, 0);
+      return sum + listingRentalTotal;
     }, 0);
 
     // 6. Activités récentes

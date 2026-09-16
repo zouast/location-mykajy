@@ -6,7 +6,6 @@ import type { Inquiry, InquiryStatus } from '@/types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import {
   MessageSquare,
   Mail,
@@ -15,12 +14,8 @@ import {
   Clock,
   CheckCircle,
   Send,
-  Building,
   ExternalLink,
   Trash2,
-  Filter,
-  CheckCircle2,
-  AlertCircle,
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<

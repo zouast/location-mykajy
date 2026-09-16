@@ -117,6 +117,16 @@ export function Layout() {
                 >
                   <span className="text-xs font-semibold">Locations & Baux</span>
                 </Link>
+                <Link
+                  to="/messages"
+                  title="Messagerie Instantanée"
+                  className={cn(
+                    buttonVariants({ variant: 'ghost', size: 'sm' }),
+                    'rounded-full text-muted-foreground hover:text-indigo-600',
+                  )}
+                >
+                  <span className="text-xs font-semibold">Messages</span>
+                </Link>
                 {user?.role === 'ADMIN' ? (
                   <Link
                     to="/admin/dashboard"
@@ -308,6 +318,13 @@ export function Layout() {
                       className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-start text-xs')}
                     >
                       Mes Locations & Baux
+                    </Link>
+                    <Link
+                      to="/messages"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={cn(buttonVariants({ variant: 'outline' }), 'w-full justify-start text-xs')}
+                    >
+                      Messagerie Instantanée
                     </Link>
                     <Link
                       to="/profile"

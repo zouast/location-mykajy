@@ -69,76 +69,76 @@ async function main() {
   const admin = await prisma.user.create({
     data: {
       email: 'admin@mykajy.local',
-      password: hash,
+      passwordHash: hash,
       firstName: 'Admin',
       lastName: 'Système',
       role: Role.ADMIN,
       gender: Gender.MALE,
-      isVerified: true,
+      isVerified: true, emailVerified: true, status: 'ACTIVE',
     },
   });
 
   const agencyAdminUser = await prisma.user.create({
     data: {
       email: 'agence@mykajy.local',
-      password: hash,
+      passwordHash: hash,
       firstName: 'Sophie',
       lastName: 'Renard',
       phone: '+33 6 12 34 56 78',
       role: Role.AGENCY_ADMIN,
       gender: Gender.FEMALE,
-      isVerified: true,
+      isVerified: true, emailVerified: true, status: 'ACTIVE',
     },
   });
 
   const agentUser = await prisma.user.create({
     data: {
       email: 'agent@mykajy.local',
-      password: hash,
+      passwordHash: hash,
       firstName: 'Pierre',
       lastName: 'Dubois',
       phone: '+33 6 98 76 54 32',
       role: Role.AGENT,
       gender: Gender.MALE,
-      isVerified: true,
+      isVerified: true, emailVerified: true, status: 'ACTIVE',
     },
   });
 
   const ownerUser = await prisma.user.create({
     data: {
       email: 'owner@mykajy.local',
-      password: hash,
+      passwordHash: hash,
       firstName: 'Alice',
       lastName: 'Martin',
       phone: '+33 6 55 44 33 22',
       role: Role.OWNER,
       gender: Gender.FEMALE,
-      isVerified: true,
+      isVerified: true, emailVerified: true, status: 'ACTIVE',
     },
   });
 
   const clientUser = await prisma.user.create({
     data: {
       email: 'client@mykajy.local',
-      password: hash,
+      passwordHash: hash,
       firstName: 'Jean',
       lastName: 'Dupont',
       phone: '+33 6 11 22 33 44',
       role: Role.CLIENT,
       gender: Gender.MALE,
-      isVerified: true,
+      isVerified: true, emailVerified: true, status: 'ACTIVE',
     },
   });
 
   const clientUser2 = await prisma.user.create({
     data: {
       email: 'marie@mykajy.local',
-      password: hash,
+      passwordHash: hash,
       firstName: 'Marie',
       lastName: 'Lambert',
       role: Role.CLIENT,
       gender: Gender.FEMALE,
-      isVerified: true,
+      isVerified: true, emailVerified: true, status: 'ACTIVE',
     },
   });
 
@@ -157,7 +157,7 @@ async function main() {
       email: 'contact@mykajy-immo.fr',
       website: 'https://immo.mykajy.fr',
       licenseNumber: 'CPI 7501 2026 000 123 456',
-      isVerified: true,
+      isVerified: true, emailVerified: true, status: 'ACTIVE',
     },
   });
 

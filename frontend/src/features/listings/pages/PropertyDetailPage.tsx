@@ -5,6 +5,7 @@ import { listingsService } from '@/services/listings.service';
 import { inquiriesService } from '@/services/inquiries.service';
 import { VisitBookingModal } from '@/features/visits/components/VisitBookingModal';
 import { RentalApplicationModal } from '@/features/rentals/components/RentalApplicationModal';
+import { StartConversationModal } from '@/features/messages/components/StartConversationModal';
 import { PropertyCard } from '../components/PropertyCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -29,10 +30,10 @@ import {
   Building2,
   Layers,
   Home,
-  Check,
   Maximize,
   ExternalLink,
   FileText,
+  MessageSquare,
 } from 'lucide-react';
 
 export default function PropertyDetailPage() {
@@ -43,11 +44,9 @@ export default function PropertyDetailPage() {
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [showApplyModal, setShowApplyModal] = useState(false);
-  const [visitSent, setVisitSent] = useState(false);
+  const [showChatModal, setShowChatModal] = useState(false);
   const [contactSent, setContactSent] = useState(false);
   const [sendingInquiry, setSendingInquiry] = useState(false);
-  const [visitDate, setVisitDate] = useState('');
-  const [visitTimeSlot, setVisitTimeSlot] = useState('morning');
 
   // Contact form state
   const [contactName, setContactName] = useState('');
@@ -151,29 +150,6 @@ export default function PropertyDetailPage() {
     } catch (err) {
       console.error("Erreur d'envoi du message :", err);
       alert("Une erreur est survenue lors de l'envoi de votre message. Veuillez réessayer.");
-    } finally {
-      setSendingInquiry(false);
-    }
-  };
-
-  const handleVisitSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!listing?.id) return;
-
-    try {
-      setSendingInquiry(true);
-      await inquiriesService.create({
-        listingId: listing.id,
-        subject: `Demande de visite souhaitée le ${visitDate} (${visitTimeSlot === 'morning' ? 'Matin' : 'Après-midi'})`,
-        message: `Bonjour, je souhaiterais visiter le bien "${listing.title || property.title}" le ${visitDate} pendant le créneau ${visitTimeSlot === 'morning' ? 'du matin (9h-12h)' : "de l'après-midi (14h-18h)"}.`,
-        name: contactName.trim() || undefined,
-        email: contactEmail.trim() || undefined,
-        phone: contactPhone.trim() || undefined,
-      });
-      setVisitSent(true);
-    } catch (err) {
-      console.error("Erreur lors de la demande de visite :", err);
-      alert("Une erreur est survenue lors de la demande de visite. Veuillez réessayer.");
     } finally {
       setSendingInquiry(false);
     }
@@ -545,6 +521,14 @@ Proche de toutes commodités, des écoles, des commerces et des transports en co
                 </Button>
               )}
 
+              <Button
+                variant="outline"
+                onClick={() => setShowChatModal(true)}
+                className="w-full rounded-2xl border-purple-600/40 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 py-6 font-bold text-sm"
+              >
+                <MessageSquare className="mr-2 h-4 w-4" /> Discuter par messagerie directe
+              </Button>
+
               {/* Section 11 : Formulaire de contact direct */}
               <div className="rounded-2xl bg-muted/40 p-4 border border-border/60">
                 <h3 className="font-bold text-xs text-foreground uppercase tracking-wider mb-3">
@@ -667,6 +651,17 @@ Proche de toutes commodités, des écoles, des commerces et des transports en co
         deposit={price.deposit || 0}
         isOpen={showApplyModal}
         onClose={() => setShowApplyModal(false)}
+      />
+
+      {/* ── Modal Messagerie Directe ── */}
+      <StartConversationModal
+        isOpen={showChatModal}
+        onClose={() => setShowChatModal(false)}
+        recipientId={(listing as any)?.agent?.userId || (listing as any)?.property?.owner?.userId || 'agent-support'}
+        recipientName={(listing as any)?.agent?.name || 'Le conseiller Immo-MyKajy'}
+        recipientRole={(listing as any)?.agent ? 'Agent Immobilier' : 'Conseiller'}
+        listingId={listing.id}
+        listingTitle={listing.title || property.title}
       />
     </div>
   );

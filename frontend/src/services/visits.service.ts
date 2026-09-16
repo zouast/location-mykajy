@@ -82,4 +82,22 @@ export const visitsService = {
     );
     return (res.data as { data: { success: boolean; message: string } }).data || res.data;
   },
+
+  /** Alias rétrocompatibilité pour getVisits */
+  async getVisits(params?: { listingId?: string }): Promise<Visit[]> {
+    const query = params?.listingId ? `?listingId=${params.listingId}` : '';
+    const res = await api.get<{ data: Visit[] | { items: Visit[] } } | Visit[]>(`/visits${query}`);
+    const body: any = res.data;
+    if (Array.isArray(body)) return body;
+    if (Array.isArray(body?.data)) return body.data;
+    if (Array.isArray(body?.data?.items)) return body.data.items;
+    return [];
+  },
+
+  /** Alias rétrocompatibilité pour createVisit */
+  async createVisit(payload: CreateVisitPayload): Promise<Visit> {
+    return visitsService.create(payload);
+  },
 };
+
+export default visitsService;

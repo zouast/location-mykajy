@@ -7,12 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   User,
-  Mail,
   Phone,
-  Shield,
-  KeyRound,
-  CheckCircle2,
-  AlertTriangle,
   LogOut,
   Save,
   Lock,

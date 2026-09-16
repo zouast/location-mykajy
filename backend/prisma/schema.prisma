@@ -16,11 +16,20 @@ datasource db {
 // └──────────────────────────────────────────────────────────────────────────────┘
 
 enum Role {
+  LOCATAIRE
+  PROPRIETAIRE
   ADMIN
   AGENCY_ADMIN
   AGENT
   OWNER
   CLIENT
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  BLOCKED
 }
 
 enum Gender {
@@ -134,19 +143,32 @@ enum ContractStatus {
   CANCELLED
 }
 
+enum PaymentType {
+  RENT
+  DEPOSIT
+  COMMISSION
+  DOWN_PAYMENT
+  SALE_PAYMENT
+  OTHER_FEES
+}
+
 enum PaymentStatus {
   PENDING
   PROCESSING
+  PAID
   COMPLETED
   FAILED
+  CANCELLED
   REFUNDED
   OVERDUE
 }
 
 enum PaymentMethod {
+  STRIPE
   CARD
-  BANK_TRANSFER
   MOBILE_MONEY
+  BANK_TRANSFER
+  MANUAL
   CASH
   CHECK
   OTHER
@@ -205,21 +227,24 @@ enum AuditAction {
 
 /// Compte utilisateur central de la plateforme
 model User {
-  id          String    @id @default(uuid())
-  email       String    @unique
-  password    String
-  firstName   String?
-  lastName    String?
-  phone       String?
-  avatarUrl   String?
-  gender      Gender?
-  role        Role      @default(CLIENT)
-  isActive    Boolean   @default(true)
-  isVerified  Boolean   @default(false)
-  lastLoginAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime? // Soft delete
+  id            String     @id @default(uuid())
+  email         String     @unique
+  passwordHash  String     @map("password")
+  firstName     String?
+  lastName      String?
+  phone         String?
+  avatarUrl     String?
+  gender        Gender?
+  role          Role       @default(LOCATAIRE)
+  status        UserStatus @default(PENDING)
+  emailVerified Boolean    @default(false)
+  phoneVerified Boolean    @default(false)
+  isActive      Boolean    @default(true)
+  isVerified    Boolean    @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime? // Soft delete
 
   // ── Profils (un seul actif par rôle) ──
   agentProfile  Agent?
@@ -227,24 +252,28 @@ model User {
   clientProfile Client?
 
   // ── Relations ──
-  favorites         Favorite[]
-  savedSearches     SavedSearch[]
-  visits            Visit[]                   @relation("ClientVisits")
-  inquiries         Inquiry[]                 @relation("ClientInquiries")
-  messagesSent      Message[]                 @relation("SentMessages")
-  notifications     Notification[]
-  sales             Sale[]                    @relation("BuyerSales")
-  rentals           Rental[]                  @relation("TenantRentals")
-  payments          Payment[]                 @relation("UserPayments")
-  auditLogs         AuditLog[]
-  conversationUsers ConversationParticipant[]
-  refreshTokens     RefreshToken[]
-  passwordResetTokens     PasswordResetToken[]
+  favorites              Favorite[]
+  savedSearches          SavedSearch[]
+  visits                 Visit[]                   @relation("ClientVisits")
+  inquiries              Inquiry[]                 @relation("ClientInquiries")
+  messagesSent           Message[]                 @relation("SentMessages")
+  notifications          Notification[]
+  sales                  Sale[]                    @relation("BuyerSales")
+  rentals                Rental[]                  @relation("TenantRentals")
+  payments               Payment[]                 @relation("UserPayments")
+  auditLogs              AuditLog[]
+  conversationUsers      ConversationParticipant[]
+  refreshTokens          RefreshToken[]
+  passwordResetTokens    PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  rentalApplications     RentalApplication[]
 
-  @@index([email])
   @@index([role])
+  @@index([status])
+  @@index([createdAt])
+  @@index([email])
   @@index([isActive])
+  @@map("users")
 }
 
 /// Jeton de rafraîchissement (opaque, hashé en base)
@@ -285,6 +314,8 @@ model EmailVerificationToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
 }
 
 /// Agence immobilière
@@ -337,12 +368,13 @@ model Agent {
   updatedAt       DateTime @updatedAt
 
   // ── Relations ──
-  properties  Property[]
-  visits      Visit[]      @relation("AgentVisits")
-  inquiries   Inquiry[]    @relation("AgentInquiries")
-  sales       Sale[]       @relation("AgentSales")
-  rentals     Rental[]     @relation("AgentRentals")
-  commissions Commission[]
+  properties         Property[]
+  visits             Visit[]             @relation("AgentVisits")
+  inquiries          Inquiry[]           @relation("AgentInquiries")
+  sales              Sale[]              @relation("AgentSales")
+  rentals            Rental[]            @relation("AgentRentals")
+  commissions        Commission[]
+  rentalApplications RentalApplication[]
 
   @@map("AgentProfile")
 }
@@ -359,9 +391,10 @@ model Owner {
   updatedAt   DateTime @updatedAt
 
   // ── Relations ──
-  properties Property[]
-  sales      Sale[]     @relation("SellerSales")
-  rentals    Rental[]   @relation("LandlordRentals")
+  properties         Property[]
+  sales              Sale[]              @relation("SellerSales")
+  rentals            Rental[]            @relation("LandlordRentals")
+  rentalApplications RentalApplication[]
 
   @@map("OwnerProfile")
 }
@@ -530,13 +563,14 @@ model Listing {
   deletedAt       DateTime?
 
   // ── Relations ──
-  price         ListingPrice?
-  favorites     Favorite[]
-  visits        Visit[]
-  inquiries     Inquiry[]
-  sales         Sale[]
-  rentals       Rental[]
-  conversations Conversation[]
+  price               ListingPrice?
+  favorites           Favorite[]
+  visits              Visit[]
+  inquiries           Inquiry[]
+  sales               Sale[]
+  rentals             Rental[]
+  conversations       Conversation[]
+  rentalApplications  RentalApplication[]
 
   @@index([transactionType])
   @@index([status])
@@ -834,6 +868,7 @@ model Payment {
   id             String         @id @default(uuid())
   userId         String
   user           User           @relation("UserPayments", fields: [userId], references: [id])
+  type           PaymentType    @default(RENT)
   saleId         String?
   sale           Sale?          @relation("SalePayments", fields: [saleId], references: [id])
   rentalId       String?
@@ -842,16 +877,20 @@ model Payment {
   currency       String         @default("EUR")
   status         PaymentStatus  @default(PENDING)
   method         PaymentMethod?
-  transactionRef String?        @unique // Référence externe (passerelle de paiement)
+  provider       String? // STRIPE, MOBILE_MONEY, BANK_TRANSFER, MANUAL
+  providerRef    String? // ID de transaction externe / session
+  transactionRef String?        @unique // Référence externe (passerelle de paiement / reçu)
   description    String? // Ex: "Loyer Septembre 2026", "Dépôt de garantie"
-  dueDate        DateTime
+  dueDate        DateTime       @default(now())
   paidAt         DateTime?
   failedReason   String?
   receiptUrl     String? // Lien vers le reçu/facture
+  metadata       Json? // Données techniques / payload provider
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
   @@index([userId])
+  @@index([type])
   @@index([saleId])
   @@index([rentalId])
   @@index([status])

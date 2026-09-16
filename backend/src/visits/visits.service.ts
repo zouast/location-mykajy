@@ -273,6 +273,8 @@ export class VisitsService {
               include: {
                 location: true,
                 media: { where: { isPrimary: true }, take: 1 },
+                owner: true,
+                agent: true,
               },
             },
           },

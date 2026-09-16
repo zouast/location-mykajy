@@ -92,8 +92,17 @@ export class UserResponseDto {
   @ApiPropertyOptional({ enum: Gender, example: Gender.MALE })
   gender: Gender | null;
 
-  @ApiProperty({ enum: Role, example: Role.CLIENT })
+  @ApiProperty({ enum: Role, example: Role.LOCATAIRE })
   role: Role;
+
+  @ApiPropertyOptional({ example: 'PENDING' })
+  status?: string;
+
+  @ApiProperty({ example: false })
+  emailVerified: boolean;
+
+  @ApiProperty({ example: false })
+  phoneVerified: boolean;
 
   @ApiProperty({ example: true })
   isActive: boolean;

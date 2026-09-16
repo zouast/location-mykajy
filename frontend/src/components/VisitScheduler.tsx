@@ -101,7 +101,7 @@ export const VisitScheduler: React.FC<Props> = ({ listingId }) => {
                 <button
                   onClick={async () => {
                     try {
-                      await VisitsService.updateStatus(v.id, { status: 'CANCELLED_BY_AGENT' });
+                      await VisitsService.updateStatus(v.id, { status: 'CANCELLED', cancelReason: 'Annulé par l’agent' });
                       await fetchVisits();
                     } catch (err: any) {
                       alert(err?.response?.data?.message || err.message || 'Erreur');

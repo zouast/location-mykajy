@@ -274,11 +274,11 @@ export class AgentsService {
 
     const inquiryWhere: Prisma.InquiryWhereInput = isAgencyAdmin
       ? { listing: { property: { agencyId } } }
-      : { OR: [{ agentId: agent.id }, { listing: { property: { agentId: agent.id } }] };
+      : { OR: [{ agentId: agent.id }, { listing: { property: { agentId: agent.id } } }] };
 
     const visitWhere: Prisma.VisitWhereInput = isAgencyAdmin
       ? { listing: { property: { agencyId } } }
-      : { OR: [{ agentId: agent.id }, { listing: { property: { agentId: agent.id } }] };
+      : { OR: [{ agentId: agent.id }, { listing: { property: { agentId: agent.id } } }] };
 
     const saleWhere: Prisma.SaleWhereInput = isAgencyAdmin
       ? { listing: { property: { agencyId } } }
@@ -474,7 +474,7 @@ export class AgentsService {
     // Gather clients from Visits, Sales, Rentals and Inquiries
     const visitWhere: Prisma.VisitWhereInput = isAgencyAdmin
       ? { listing: { property: { agencyId } } }
-      : { OR: [{ agentId: agent.id }, { listing: { property: { agentId: agent.id } }] };
+      : { OR: [{ agentId: agent.id }, { listing: { property: { agentId: agent.id } } }] };
 
     const saleWhere: Prisma.SaleWhereInput = isAgencyAdmin
       ? { listing: { property: { agencyId } } }

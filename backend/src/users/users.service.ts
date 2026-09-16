@@ -54,7 +54,7 @@ export class UsersService {
     return this.prisma.user.create({
       data: {
         email: createUserDto.email,
-        password: createUserDto.password,
+        passwordHash: createUserDto.password,
         firstName: createUserDto.firstName,
         lastName: createUserDto.lastName,
       },
@@ -68,11 +68,11 @@ export class UsersService {
   async findOneByEmail(
     email: string,
     selectPassword?: false,
-  ): Promise<Omit<User, 'password'> | null>;
+  ): Promise<Omit<User, 'passwordHash'> | null>;
   async findOneByEmail(
     email: string,
     selectPassword = false,
-  ): Promise<User | Omit<User, 'password'> | null> {
+  ): Promise<User | Omit<User, 'passwordHash'> | null> {
     const user = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -99,14 +99,18 @@ export class UsersService {
   async updatePassword(id: string, hashedPassword: string): Promise<User> {
     return this.prisma.user.update({
       where: { id },
-      data: { password: hashedPassword },
+      data: { passwordHash: hashedPassword },
     });
   }
 
   async markEmailVerified(id: string): Promise<User> {
     return this.prisma.user.update({
       where: { id },
-      data: { isVerified: true },
+      data: {
+        isVerified: true,
+        emailVerified: true,
+        status: 'ACTIVE',
+      },
     });
   }
 
@@ -141,8 +145,8 @@ export class UsersService {
       throw new NotFoundException('Utilisateur non trouvé');
     }
 
-    const { password, ...safeUser } = user;
-    void password;
+    const { passwordHash, ...safeUser } = user;
+    void passwordHash;
     return safeUser;
   }
 
@@ -191,7 +195,7 @@ export class UsersService {
 
     const isPasswordValid = await this.tokenService.comparePassword(
       dto.currentPassword,
-      user.password,
+      user.passwordHash,
     );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Mot de passe actuel incorrect');
@@ -215,6 +219,8 @@ export class UsersService {
       data: {
         email: dto.newEmail,
         isVerified: false,
+        emailVerified: false,
+        status: 'PENDING',
       },
     });
 
@@ -260,7 +266,7 @@ export class UsersService {
 
     const isPasswordValid = await this.tokenService.comparePassword(
       dto.password,
-      user.password,
+      user.passwordHash,
     );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Mot de passe de confirmation incorrect');
@@ -375,7 +381,7 @@ export class UsersService {
     const user = await this.prisma.user.create({
       data: {
         email: dto.email,
-        password: hashedPassword,
+        passwordHash: hashedPassword,
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
@@ -384,6 +390,8 @@ export class UsersService {
         role: dto.role ?? Role.CLIENT,
         isActive: dto.isActive ?? true,
         isVerified: dto.isVerified ?? false,
+        emailVerified: dto.isVerified ?? false,
+        status: (dto.isActive ?? true) ? 'ACTIVE' : 'PENDING',
       },
     });
 

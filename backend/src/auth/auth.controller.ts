@@ -17,7 +17,11 @@ import { LogoutDto } from './dto/logout.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthenticatedUser } from './interfaces/jwt-payload.interface';
-import { AuthResponseDto, MessageResponseDto } from './dto/auth-response.dto';
+import {
+  AuthResponseDto,
+  MessageResponseDto,
+  RegisterResponseDto,
+} from './dto/auth-response.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -26,9 +30,12 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Inscription d’un nouvel utilisateur' })
-  @ApiResponse({ status: 201, type: AuthResponseDto })
-  async register(@Body() registerDto: RegisterDto): Promise<AuthResponseDto> {
+  @ApiOperation({ summary: 'Inscription publique (LOCATAIRE ou PROPRIETAIRE uniquement)' })
+  @ApiResponse({ status: 201, type: RegisterResponseDto })
+  @ApiResponse({ status: 400, description: 'Données invalides ou rôle non autorisé' })
+  @ApiResponse({ status: 403, description: 'Rôle ADMIN non autorisé via inscription publique' })
+  @ApiResponse({ status: 409, description: 'Email déjà utilisé' })
+  async register(@Body() registerDto: RegisterDto): Promise<RegisterResponseDto> {
     return this.authService.register(registerDto);
   }
 

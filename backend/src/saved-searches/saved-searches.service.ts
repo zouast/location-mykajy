@@ -333,12 +333,16 @@ export class SavedSearchesService {
       where.transactionType = search.transactionType as Prisma.EnumTransactionTypeFilter;
     }
 
-    if (search.minPrice !== null && search.minPrice !== undefined) {
-      where.price = { ...where.price, price: { gte: search.minPrice } };
-    }
-
-    if (search.maxPrice !== null && search.maxPrice !== undefined) {
-      where.price = { ...where.price, price: { ...(where.price?.price as object), lte: search.maxPrice } };
+    if (
+      (search.minPrice !== null && search.minPrice !== undefined) ||
+      (search.maxPrice !== null && search.maxPrice !== undefined)
+    ) {
+      where.price = {
+        price: {
+          ...(search.minPrice !== null && search.minPrice !== undefined ? { gte: search.minPrice } : {}),
+          ...(search.maxPrice !== null && search.maxPrice !== undefined ? { lte: search.maxPrice } : {}),
+        },
+      };
     }
 
     if (search.city || search.minArea || search.maxArea || search.minRooms || search.propertyTypeId) {

@@ -23,6 +23,7 @@ const InquiriesManagementPage = lazy(() => import('@/features/inquiries/pages/In
 const VisitsPage = lazy(() => import('@/features/visits/pages/VisitsPage'));
 const RentalsPage = lazy(() => import('@/features/rentals/pages/RentalsPage'));
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
+const MessagesPage = lazy(() => import('@/features/messages/pages/MessagesPage'));
 
 // Owner pages
 const OwnerLayout = lazy(() =>
@@ -112,6 +113,7 @@ export const router = createBrowserRouter([
           { path: 'inquiries', element: withSuspense(<InquiriesManagementPage />) },
           { path: 'visits', element: withSuspense(<VisitsPage />) },
           { path: 'rentals', element: withSuspense(<RentalsPage />) },
+          { path: 'messages', element: withSuspense(<MessagesPage />) },
           { path: 'dashboard', element: withSuspense(<DashboardPage />) },
         ],
       },

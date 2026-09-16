@@ -12,6 +12,7 @@ import { TokenService } from './services/token.service';
 import { AuthMailService } from './services/auth-mail.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { PrismaService } from '../database/prisma.service';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { RolesGuard } from './guards/roles.guard';
   ],
   providers: [
     AuthService,
+    PrismaService,
     TokenService,
     AuthMailService,
     JwtStrategy,
