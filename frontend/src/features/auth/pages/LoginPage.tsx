@@ -32,15 +32,34 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  const getDestination = (role?: string) => {
+    // If user was trying to access a specific protected page, redirect there
+    if (from && from !== '/profile' && from !== '/') {
+      return from;
+    }
+    switch (role) {
+      case 'LOCATAIRE':
+        return '/tenant/dashboard';
+      case 'PROPRIETAIRE':
+      case 'OWNER':
+        return '/owner/dashboard';
+      case 'ADMIN':
+        return '/admin/dashboard';
+      default:
+        return '/profile';
+    }
+  };
+
   const onSubmit = async (data: LoginFormValues) => {
     try {
-      await login(data);
-      navigate(from, { replace: true });
+      const user = await login(data);
+      const destination = getDestination(user.role);
+      navigate(destination, { replace: true });
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { message?: string } } };
       const msg =
         axiosError.response?.data?.message ||
-        'Identifiants incorrects ou compte inactif. Veuillez réessayer.';
+        'Identifiants incorrects ou compte inactif. Veuillez vérifier votre email et mot de passe.';
       setError('root', { message: msg });
     }
   };

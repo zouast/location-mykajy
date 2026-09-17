@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { ProtectedRoute, GuestRoute } from './guards';
+import { ProtectedRoute, GuestRoute, RoleRoute } from './guards';
 import { Layout } from '@/components/layout/Layout';
 import { lazy, Suspense } from 'react';
 
@@ -14,6 +14,7 @@ const AgenciesPage = lazy(() => import('@/features/agencies/pages/AgenciesPage')
 // Auth & User pages
 const LoginPage = lazy(() => import('@/features/auth/pages/LoginPage'));
 const RegisterPage = lazy(() => import('@/features/auth/pages/RegisterPage'));
+const VerifyEmailPage = lazy(() => import('@/features/auth/pages/VerifyEmailPage'));
 const ForgotPasswordPage = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('@/features/auth/pages/ResetPasswordPage'));
 const ProfilePage = lazy(() => import('@/features/auth/pages/ProfilePage'));
@@ -24,6 +25,9 @@ const VisitsPage = lazy(() => import('@/features/visits/pages/VisitsPage'));
 const RentalsPage = lazy(() => import('@/features/rentals/pages/RentalsPage'));
 const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
 const MessagesPage = lazy(() => import('@/features/messages/pages/MessagesPage'));
+
+// Tenant dedicated page
+const TenantDashboardPage = lazy(() => import('@/features/tenant/pages/TenantDashboardPage'));
 
 // Owner pages
 const OwnerLayout = lazy(() =>
@@ -87,6 +91,7 @@ export const router = createBrowserRouter([
       { path: 'sale', element: withSuspense(<SalePage />) },
       { path: 'rent', element: withSuspense(<RentPage />) },
       { path: 'agencies', element: withSuspense(<AgenciesPage />) },
+      { path: 'verify-email', element: withSuspense(<VerifyEmailPage />) },
 
       // Legacy aliases
       { path: 'listings', element: <Navigate to="/properties" replace /> },
@@ -103,7 +108,7 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // ─── Protected routes ───
+      // ─── Protected routes (Common) ───
       {
         element: <ProtectedRoute />,
         children: [
@@ -117,13 +122,23 @@ export const router = createBrowserRouter([
           { path: 'dashboard', element: withSuspense(<DashboardPage />) },
         ],
       },
+
+      // ─── Protected Tenant Space (LOCATAIRE) ───
+      {
+        path: 'tenant',
+        element: <RoleRoute allowedRoles={['LOCATAIRE', 'CLIENT', 'ADMIN']} />,
+        children: [
+          { index: true, element: <Navigate to="/tenant/dashboard" replace /> },
+          { path: 'dashboard', element: withSuspense(<TenantDashboardPage />) },
+        ],
+      },
     ],
   },
 
-  // ─── Dedicated Owner Space (Protected) ───
+  // ─── Dedicated Owner Space (Protected: PROPRIETAIRE / OWNER / ADMIN) ───
   {
     path: '/owner',
-    element: <ProtectedRoute />,
+    element: <RoleRoute allowedRoles={['PROPRIETAIRE', 'OWNER', 'ADMIN']} />,
     children: [
       {
         element: withSuspense(<OwnerLayout />),
@@ -143,7 +158,7 @@ export const router = createBrowserRouter([
   // ─── Dedicated Agent / Agency Admin Space (Protected) ───
   {
     path: '/agent',
-    element: <ProtectedRoute />,
+    element: <RoleRoute allowedRoles={['AGENT', 'AGENCY_ADMIN', 'ADMIN']} />,
     children: [
       {
         element: withSuspense(<AgentLayout />),
@@ -164,10 +179,10 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // ─── Dedicated Admin Space (Protected) ───
+  // ─── Dedicated Admin Space (Protected: ADMIN strictly) ───
   {
     path: '/admin',
-    element: <ProtectedRoute />,
+    element: <RoleRoute allowedRoles={['ADMIN']} />,
     children: [
       {
         element: withSuspense(<AdminLayout />),
@@ -187,5 +202,3 @@ export const router = createBrowserRouter([
     ],
   },
 ]);
-
-

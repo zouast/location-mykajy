@@ -156,8 +156,7 @@ async function main() {
       phone: '+33 1 42 68 53 00',
       email: 'contact@mykajy-immo.fr',
       website: 'https://immo.mykajy.fr',
-      licenseNumber: 'CPI 7501 2026 000 123 456',
-      isVerified: true, emailVerified: true, status: 'ACTIVE',
+      isVerified: true,
     },
   });
 

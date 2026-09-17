@@ -1,6 +1,4 @@
-// ─── Enums ───────────────────────────────────────────────────────────────────
-
-export type Role = 'ADMIN' | 'AGENCY_ADMIN' | 'AGENT' | 'OWNER' | 'CLIENT';
+export type Role = 'ADMIN' | 'AGENCY_ADMIN' | 'AGENT' | 'OWNER' | 'CLIENT' | 'LOCATAIRE' | 'PROPRIETAIRE';
 export type TransactionType = 'SALE' | 'RENT';
 export type PropertyStatus = 'AVAILABLE' | 'UNDER_OFFER' | 'RENTED' | 'SOLD' | 'UNDER_RENOVATION' | 'ARCHIVED';
 export type ListingStatus = 'DRAFT' | 'PENDING_REVIEW' | 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'COMPLETED' | 'CANCELLED';
@@ -292,6 +290,9 @@ export interface User {
   avatarUrl?: string | null;
   gender?: string | null;
   role: Role;
+  status?: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
   isActive: boolean;
   isVerified?: boolean;
   createdAt?: string;
@@ -309,8 +310,17 @@ export interface AuthResponse {
   tokens: AuthTokens;
 }
 
+export interface RegisterResponse {
+  success: boolean;
+  message: string;
+  data: {
+    user: Partial<User>;
+  };
+}
+
 export interface MessageResponse {
   message: string;
+  success?: boolean;
 }
 
 // ─── Favorites & Saved Searches ──────────────────────────────────────────────

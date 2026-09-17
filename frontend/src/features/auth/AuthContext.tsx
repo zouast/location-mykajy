@@ -8,12 +8,14 @@ import {
 } from '@/services/auth.service';
 import { tokenStorage } from '@/services/api';
 
+import type { RegisterResponse } from '@/types';
+
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (payload: LoginPayload) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  login: (payload: LoginPayload) => Promise<User>;
+  register: (payload: RegisterPayload) => Promise<RegisterResponse>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateProfile: (payload: UpdateProfilePayload) => Promise<void>;
@@ -59,23 +61,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshProfile();
   }, [refreshProfile]);
 
-  const login = useCallback(async (payload: LoginPayload) => {
+  const login = useCallback(async (payload: LoginPayload): Promise<User> => {
     setIsLoading(true);
     try {
       const response = await authService.login(payload);
       setUser(response.user);
       localStorage.setItem('user_info', JSON.stringify(response.user));
+      return response.user;
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const register = useCallback(async (payload: RegisterPayload) => {
+  const register = useCallback(async (payload: RegisterPayload): Promise<RegisterResponse> => {
     setIsLoading(true);
     try {
       const response = await authService.register(payload);
-      setUser(response.user);
-      localStorage.setItem('user_info', JSON.stringify(response.user));
+      return response;
     } finally {
       setIsLoading(false);
     }

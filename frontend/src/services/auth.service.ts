@@ -1,5 +1,5 @@
 import api, { tokenStorage } from '@/services/api';
-import type { AuthResponse, User, MessageResponse } from '@/types';
+import type { AuthResponse, User, MessageResponse, RegisterResponse } from '@/types';
 
 export interface LoginPayload {
   email: string;
@@ -9,10 +9,12 @@ export interface LoginPayload {
 export interface RegisterPayload {
   email: string;
   password: string;
-  firstName?: string;
-  lastName?: string;
+  passwordConfirmation?: string;
+  firstName: string;
+  lastName: string;
   phone?: string;
-  role?: string;
+  role: 'LOCATAIRE' | 'PROPRIETAIRE';
+  acceptTerms?: boolean;
 }
 
 export interface UpdateProfilePayload {
@@ -33,13 +35,15 @@ export const authService = {
   },
 
   /** Inscription utilisateur */
-  async register(payload: RegisterPayload): Promise<AuthResponse> {
-    const res = await api.post<AuthResponse>('/auth/register', payload);
-    const data = (res.data as unknown as { data: AuthResponse }).data || res.data;
-    if (data.tokens?.accessToken && data.tokens?.refreshToken) {
-      tokenStorage.setTokens(data.tokens.accessToken, data.tokens.refreshToken);
-    }
-    return data;
+  async register(payload: RegisterPayload): Promise<RegisterResponse> {
+    const res = await api.post<RegisterResponse>('/auth/register', payload);
+    return res.data;
+  },
+
+  /** Vérification email */
+  async verifyEmail(token: string): Promise<MessageResponse> {
+    const res = await api.post<MessageResponse>('/auth/verify-email', { token });
+    return (res.data as unknown as { data: MessageResponse }).data || res.data;
   },
 
   /** Déconnexion */
